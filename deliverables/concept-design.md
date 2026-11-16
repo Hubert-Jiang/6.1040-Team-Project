@@ -2,29 +2,32 @@
 
 ## Overview: Role of Concepts and Type Instantiation
 
-Our app helps acquaintances within trusted communities move from *"anyone free?"* to a confirmed informal meal using a **Zoom-link sharing model**: a host creates a gathering, receives one or more unguessable shareable links (not tied to any recipient's identity), and drops them into existing group chats, mailing lists, or Slacks. To avoid overloaded concepts and reflect each mechanism's true underlying behavior, the design decomposes the application into seven small, single-purpose concepts:
+Our app helps acquaintances within trusted communities move from *"anyone free?"* to a confirmed informal meal using a **Zoom-link sharing model**: a host creates a meal gathering, receives one or more unguessable shareable links (not tied to any recipient's identity), and drops them into existing group chats, mailing lists, or Slacks. When an unauthenticated peer follows a link and clicks accept with their email, their pending acceptance is tracked while they verify their email and automatically completes once authenticated. The design decomposes the application into eight focused, single-purpose concepts:
 
 1. **`Authenticating`** verifies user identities via one-time institutional email codes and records each user's verified email domain. It gates gathering creation and—when a gathering specifies a community scope—checks domain membership without social profiles or follower lists.
-2. **`Hosting`** manages the meal-gathering lifecycle (`OPEN`, `CONFIRMED`, `BOOKED`, `CLOSED`, `CANCELLED`), dining terms (`budgetTier`, `dietaryNotes`), per-host active-table limits, and location fields (`area`, `confirmedVenue`). It stores no capacities, polls, link tokens, or potluck/game-night options.
-3. **`LinkSharing`** issues, resolves, and revokes shareable link tokens for generic target resources. Links belong to the target (not to individual guests), so a single link dropped in a group chat can be used by multiple peers, while separate links for different channels can be revoked independently.
-4. **`Reserving`** manages bounded capacities, explicit reservations, cancellations, cutoff locking, and FIFO waitlist promotion for a generic `Resource`. Separating reservation mechanics from `Hosting` lets cancelled spots reopen automatically on the same shared link.
-5. **`Profiling`** stores each user's reusable dining preferences and restrictions (dietary needs, budget ceiling, max walking time, cuisine tastes) and aggregates an anonymized group constraint summary. It performs **no** restaurant recommendations or user-to-restaurant matching.
-6. **`Polling`** runs approval polls where participating members propose candidate options and vote on a shortlist until closed, keeping voting independent of gathering timing and venue databases.
-7. **`Notifying`** delivers immediate updates and cancellable scheduled reminders strictly to participating recipients (`Recipient`, `Subject`), keeping bystanders untouched and cancelling pending reminders when reservations are released.
+2. **`Hosting`** manages the meal-gathering lifecycle (`OPEN`, `CONFIRMED`, `BOOKED`, `CLOSED`, `CANCELLED`), basic event metadata (`title`, time window, `area`, optional `details` and `confirmedVenue`), and per-host active-table limits. It stores no capacities, polls, link tokens, or user dietary/budget constraints.
+3. **`Linking`** issues, resolves, and revokes shareable link tokens for generic target resources. Links belong to the target (not to individual guests), so a single link dropped in a group chat can be resolved by many peers, while separate links for different channels can be revoked independently.
+4. **`Inviting`** records guest acceptances to an event (with clean withdrawal for guests whose plans change) and tracks pending email-keyed acceptances (`PendingAcceptances`) while an unauthenticated prospective guest completes email verification, automatically accepting the invite once verified. Uninterested peers simply ignore the shared link without needing an account or a declined cookie.
+5. **`Reserving`** manages bounded capacities, explicit reservations, cancellations, cutoff locking, and FIFO waitlist promotion for a generic `Resource`. Separating reservation mechanics from `Hosting` and `Inviting` lets cancelled spots reopen automatically on the same shared link.
+6. **`Profiling`** stores each user's reusable dining preferences and restrictions (dietary needs, budget preference, walking preference, cuisine tastes, notes) so table participants can view each other's dining profiles to make a qualitative group decision without public chat clutter. It performs **no** restaurant recommendations, user-to-user matching, or deterministic filtering.
+7. **`Polling`** runs approval polls where participating members propose candidate options and vote on a shortlist until closed, keeping voting independent of gathering timing and venue databases.
+8. **`Notifying`** delivers immediate updates and cancellable scheduled reminders strictly to participating recipients (`Recipient`, `Subject`), keeping bystanders untouched and cancelling pending reminders when reservations are released.
 
 ### Access Model & Why There Is No Separate `Authorizing` Concept
 
 We considered a standalone `Authorizing` concept for per-resource access control lists, but omitted it as unnecessary complexity under the Zoom-link model:
-- **Viewing gathering details** uses `LinkSharing`: anyone with an active shared link token can view a gathering's details (`area`, `confirmedVenue`, time window, terms, live open spots) without identity-bound tokens.
-- **Reserving a seat, proposing options, or voting** requires authentication (`Authenticating`) and—if the gathering specifies a `scope`—matching the verified email domain, rather than maintaining a per-person ACL; option proposals and votes are further restricted in reactions to the gathering's `host` (`Hosting`) and active reservation holders (`Reserving`).
+- **Viewing gathering details** uses `Linking`: anyone with an active shared link token can view a gathering's details (`area`, `confirmedVenue`, time window, terms, live open spots) without identity-bound tokens.
+- **Accepting an invite, reserving a seat, or voting** requires authentication (`Authenticating`) and—if the gathering specifies a `scope`—matching the verified email domain, rather than maintaining a per-person ACL; option proposals, votes, and tablemate profile views are further restricted in reactions to the gathering's `host` (`Hosting`) and active reservation holders (`Reserving`).
 
 ### Generic Type Instantiations
 
 | Concept | External Parameter | Bound To | Why / Role |
 |---|---|---|---|
 | `Hosting` | `Host` | `Authenticating.User` | Only authenticated users can host gatherings. |
-| `LinkSharing` | `Target` | `Hosting.Gathering` | Shareable links resolve to gatherings without coupling `Hosting` to URL tokens. |
-| `LinkSharing` | `Creator` | `Authenticating.User` | Only the creator (host) can issue or revoke links for their gathering. |
+| `Linking` | `Target` | `Hosting.Gathering` | Shareable links resolve to gatherings without coupling `Hosting` to URL tokens. |
+| `Linking` | `Creator` | `Authenticating.User` | Only the creator (host) can issue or revoke links for their gathering. |
+| `Inviting` | `Event` | `Hosting.Gathering` | Guest acceptances and pending pre-auth acceptances target a gathering. |
+| `Inviting` | `Guest` | `Authenticating.User` | Completed invite acceptances identify authenticated users. |
 | `Reserving` | `Resource` | `Hosting.Gathering` | Each gathering owns one bounded reservation pool (`capacity` open guest spots). |
 | `Reserving` | `User` | `Authenticating.User` | Reservations and waitlist entries identify authenticated users. |
 | `Profiling` | `User` | `Authenticating.User` | Dining preference/restriction profiles belong to authenticated users across gatherings. |
@@ -94,22 +97,21 @@ _hasDomain(user: User, domain: String) : one (matches: Flag)
 #### Note
 - **Code generation inside `Authenticating`:** `requestCode` generates the one-time code itself rather than accepting it from the caller, and returns `code` so a reaction can dispatch it over email (or log/display in local dev).
 - **Minimal user identity:** `Users` stores only `email` and `domain`—no bios, avatars, or follower lists (Ethical Analysis #2, #6). HTTP session cookies belong to the web request boundary rather than `Authenticating`.
-- **Open issue to resolve:** If a dorm or club wants board visibility scoped narrower than `@mit.edu`, the primary mechanism is sharing a `LinkSharing` link in that group's chat/list; if explicit roster checks are later needed, an `Authorizing` concept can be added cleanly without modifying `Authenticating`.
+- **Open issue to resolve:** If a dorm or club wants board visibility scoped narrower than `@mit.edu`, the primary mechanism is sharing a `Linking` link in that group's chat/list; if explicit roster checks are later needed, an `Authorizing` concept can be added cleanly without modifying `Authenticating`.
 
 ---
 
 ### 2. Hosting
 
-**Purpose:** Manage the lifecycle, dining terms, and active-table limits of informal meal gatherings so hosts cannot leave unconfirmed gatherings active or spam community boards.
+**Purpose:** Manage the lifecycle, basic event details, and active-table limits of informal meal gatherings so hosts cannot leave unconfirmed gatherings active or spam community boards.
 
-**Principle:** A host creates a meal gathering within their active-table limit, setting its time window, cutoff, budget/dietary notes, area, and optional venue. The host must confirm the gathering before its cutoff or it automatically closes; once confirmed with a venue, it can be marked booked and closes when its time window ends.
+**Principle:** A host creates a meal gathering within their active-table limit, setting its time window, cutoff, area, and optional event details or venue. The host must confirm the gathering before its cutoff or it automatically closes; once confirmed with a venue, it can be marked booked and closes when its time window ends.
 
 #### Types
 ```types
 external Host
   An authenticated user who organizes a gathering.
 
-BudgetTier is FREE or BUDGET or MODERATE or UPSCALE
 GatheringStatus is OPEN or CONFIRMED or BOOKED or CLOSED or CANCELLED
 ```
 
@@ -122,8 +124,7 @@ a set of Gatherings with
   a startTime DateTime
   a endTime DateTime
   a cutoffTime DateTime
-  a budgetTier BudgetTier
-  a dietaryNotes String
+  an optional details String
   an optional scope String
   a listedOnBoard Flag
   a area String
@@ -141,8 +142,7 @@ create(
   startTime: DateTime,
   endTime: DateTime,
   cutoffTime: DateTime,
-  budgetTier: BudgetTier,
-  dietaryNotes: String,
+  details?: String,
   scope?: String,
   listedOnBoard: Flag,
   area: String,
@@ -230,8 +230,7 @@ _getDetails(gathering: Gathering) : optional (
   startTime: DateTime,
   endTime: DateTime,
   cutoffTime: DateTime,
-  budgetTier: BudgetTier,
-  dietaryNotes: String,
+  details: String | undefined,
   scope: String | undefined,
   listedOnBoard: Flag,
   area: String,
@@ -245,7 +244,6 @@ _listBoard(scope: String, fromTime: DateTime, toTime: DateTime) : many (
   status: GatheringStatus,
   startTime: DateTime,
   cutoffTime: DateTime,
-  budgetTier: BudgetTier,
   area: String,
   confirmedVenue: String | undefined
 )
@@ -253,14 +251,15 @@ _listBoard(scope: String, fromTime: DateTime, toTime: DateTime) : many (
 ```
 
 #### Note
-- **Scoped strictly to restaurant and dining-hall meals:** Potlucks, game nights, dish/contribution expectations, and private home-address gating are intentionally omitted from this version to keep `Hosting` small and focused. If home potlucks or game nights are added later, gathering types, contribution terms, and gated private addresses can extend `Hosting` without changing `LinkSharing`, `Reserving`, `Profiling`, `Polling`, or `Notifying`.
-- **Focused responsibilities:** `Hosting` stores no seat capacities (`Reserving`), shareable URL tokens (`LinkSharing`), or poll mode flags (implied when `confirmedVenue` starts unset and a `Polling` poll is opened).
+- **Why structured budget/dietary tags live in `Profiling`, not `Hosting`:** Previously `Hosting` duplicated `BudgetTier` and `dietaryNotes`, which forced hosts to specify a budget even when no venue had been chosen yet and conflated gathering lifecycle with dining preferences. Free-form `details` lets a host jot down event context (e.g., *"Tapas ~$25"* or *"Maseeh guest swipes"*) when relevant, while all structured dietary/budget preferences live exclusively in `Profiling`.
+- **Scoped strictly to restaurant and dining-hall meals:** Potlucks, game nights, dish/contribution expectations, and private home-address gating are intentionally omitted from this version to keep `Hosting` small and focused. If home potlucks or game nights are added later, gathering types, contribution terms, and gated private addresses can extend `Hosting` without changing `Linking`, `Inviting`, `Reserving`, `Profiling`, `Polling`, or `Notifying`.
+- **Focused responsibilities:** `Hosting` stores no seat capacities (`Reserving`), shareable URL tokens (`Linking`), guest invite states (`Inviting`), or poll mode flags (implied when `confirmedVenue` starts unset and a `Polling` poll is opened).
 - **Anti-spam lifecycle:** The 3-active-gathering cap per host and automatic `expireUnconfirmed` closure after `cutoffTime` prevent board clutter and abandoned tables (Ethical Analysis #7).
 - **Open issue to resolve:** Requiring an explicit `confirm` click before `cutoffTime` protects against ghost tables, but could close a valid gathering if a host forgets. We pair it with a reminder 1 hour before cutoff via `Notifying`, and will test in Alpha/Beta whether explicit confirmation feels natural.
 
 ---
 
-### 3. LinkSharing
+### 3. Linking
 
 **Purpose:** Issue, resolve, and revoke unguessable shareable links for target resources so an owner can share one link across a group or issue separate channel links without tying links to individual user identities.
 
@@ -324,13 +323,94 @@ _listForTarget(target: Target) : many (link: Link, token: String, label: String 
 ```
 
 #### Note
-- **Not bijective to user identities:** A single `Link` (`token`) is a Zoom-like capability link meant to be dropped in a dorm list or Slack channel and used by multiple acquaintances. At the same time, a host can generate separate labeled links (e.g., `"Next House chat"` and `"6.1040 Slack"`) for the same gathering and revoke one if it spreads too widely.
-- **Independent of `Hosting` and `Authenticating`:** `LinkSharing` knows nothing about meals, emails, or seats; whether someone who follows a resolved link must also be authenticated or match a community scope is enforced in reactions.
+- **Pure link resolution separated from `Inviting`:** `Linking` replaces the earlier `LinkSharing` concept and handles *only* capability tokens (`token -> Target`). A single `token` dropped in a dorm list or Slack channel is resolved by many people and is never bound 1-to-1 to user identities.
+- **Channel-level revocation:** A host can generate separate labeled links (e.g., `"Next House chat"` and `"6.1040 Slack"`) for the same gathering and revoke one if it spreads too widely.
 - **Open issue to resolve:** Currently `revokeAllForTarget` is only needed on spam takedown; ended or cancelled gatherings can remain readable via `Hosting._getDetails` as a closed status page while `Reserving` blocks new reservations.
 
 ---
 
-### 4. Reserving
+### 4. Inviting
+
+**Purpose:** Record guest acceptances to an event—including tracking pending acceptances by email while a prospective guest verifies their account—so guests can accept seamlessly from a shared link before or after authenticating, without forcing uninterested peers to register just to say no.
+
+**Principle:** An authenticated guest accepts an event directly (and may withdraw later if plans change). When an unauthenticated person accepts using a contact email, a pending acceptance is recorded for that email and event; once they verify their account, the pending acceptance automatically completes as an accepted invitation.
+
+#### Types
+```types
+external Event
+  The gathering or event to which a guest responds.
+
+external Guest
+  An authenticated user accepting an event.
+```
+
+#### State
+```state
+a set of Acceptances with
+  an Event
+  a Guest
+  unique event and guest
+
+a set of PendingAcceptances with
+  an Event
+  a contact String
+  unique event and contact
+```
+
+#### Actions
+```actions
+accept(event: Event, guest: Guest) : returns (acceptance: Acceptance)
+  where no Acceptance exists for (event, guest)
+  then
+    add a new acceptance with event and guest
+    returns acceptance
+  where an Acceptance already exists for (event, guest)
+  then
+    refuses ALREADY_ACCEPTED "You have already accepted this invitation."
+
+withdraw(event: Event, guest: Guest) : returns ()
+  where an Acceptance exists for (event, guest)
+  then
+    remove the Acceptance for (event, guest)
+    returns
+  where no Acceptance exists for (event, guest)
+  then
+    refuses NOT_ACCEPTED "You have not accepted this invitation."
+
+deferAccept(event: Event, contact: String) : returns ()
+  where contact is a well-formed email address
+  then
+    if no PendingAcceptance exists for (event, contact) then add a new pending acceptance with event and contact
+    returns
+  where contact is not well-formed
+  then
+    refuses INVALID_CONTACT "Please enter a valid email address."
+
+clearPending(event: Event, contact: String) : returns ()
+  where true
+  then
+    remove any PendingAcceptance with matching event and contact
+    returns
+```
+
+#### Queries
+```queries
+_isAccepted(event: Event, guest: Guest) : one (accepted: Flag)
+  Returns accepted true if an Acceptance exists for (event, guest); otherwise false.
+
+_getPendingForContact(contact: String) : many (event: Event)
+  Returns all events with a PendingAcceptance for contact in unspecified order, or no rows if none exist.
+```
+
+#### Note
+- **Why there is no `decline` action or declined cookie:** Under a Zoom-link model, uninterested bystanders simply ignore or close the link with zero account creation and zero friction (aligned with keeping non-participants undisturbed). Requiring an account to decline forces bystanders to register, while a browser "declined" cookie breaks across devices and complicates changing one's mind after an accidental click or freed-up evening. Removing an existing `Acceptance` via `withdraw` lets an already-authenticated guest release their spot cleanly while remaining free to re-accept later before cutoff.
+- **Why `PendingAcceptances` lives in `Inviting` (tracker pattern):** Before verifying an email code in `Authenticating`, an arriving guest has no `Guest` identity yet—only a `contact` email string. Storing `(event, contact)` in `PendingAcceptances` lets a reaction call `Authenticating.requestCode` and then automatically complete `Inviting.accept` (and thus `Reserving.reserve`) as soon as `Authenticating.verifyCode` returns `(user)`.
+- **Separation from `Linking` and `Reserving`:** `Inviting` knows nothing about URL tokens (`Linking`) or seat capacities and waitlists (`Reserving`). `accept` expresses the guest's intent to join; reactions translate `accept` into reserving a seat (or joining the waitlist if full) and translate `withdraw` into releasing any held seat or waitlist spot.
+- **Open issue to resolve:** If an unauthenticated user accepts via `deferAccept` while 1 seat remains, and another user claims that seat before they finish verifying their email, `acceptPendingInviteOnVerify` will still accept the invite and automatically place them on the waitlist via `waitlistOnInviteAccept`. We should make sure the post-verification UI clearly states whether they got a confirmed seat or landed #1 on the waitlist, and consider expiring stale `PendingAcceptances` if they never verify.
+
+---
+
+### 5. Reserving
 
 **Purpose:** Maintain an exact, live headcount for a bounded resource by converting soft interest into explicit reservations and automatically reassigning cancelled spots from a FIFO waitlist while open.
 
@@ -463,16 +543,16 @@ _getWaitlistPosition(resource: Resource, user: User) : optional (position: Numbe
 
 ---
 
-### 5. Profiling
+### 6. Profiling
 
-**Purpose:** Let participants privately record their personal dining restrictions and preferences once so a group can view an anonymized summary of shared constraints without awkward public negotiation.
+**Purpose:** Let participants record their personal dining preferences and restrictions once so fellow table participants can read them when deciding where to eat without repeating the same back-and-forth in chat.
 
-**Principle:** A user sets their dietary restrictions, budget ceiling, optional walking limit, and cuisine preferences in their profile. When a group of users prepares to dine together, summarizing their profiles surfaces the combined dietary requirements and tightest budget/distance limits anonymously without attributing any constraint to a specific individual.
+**Principle:** A user sets their dietary restrictions, budget preference, optional walking preference, cuisine tastes, and notes in their profile. Authorized viewers (such as fellow participants at the same table) inspect those profiles to make a qualitative group choice together.
 
 #### Types
 ```types
 external User
-  An authenticated user whose dining constraints and tastes are recorded.
+  An authenticated user whose dining constraints and preferences are recorded.
 
 DietaryTag is VEGETARIAN or VEGAN or HALAL or KOSHER or GLUTEN_FREE or DAIRY_FREE or NUT_FREE
 BudgetTier is FREE or BUDGET or MODERATE or UPSCALE
@@ -483,8 +563,8 @@ BudgetTier is FREE or BUDGET or MODERATE or UPSCALE
 a set of Profiles with
   a unique User
   a dietaryRestrictions set of DietaryTag
-  a maxBudget BudgetTier
-  an optional maxWalkMinutes Number
+  a budgetPreference BudgetTier
+  an optional walkPreferenceMinutes Number
   a cuisinePreferences set of String
   an optional notes String
 ```
@@ -494,18 +574,18 @@ a set of Profiles with
 setProfile(
   user: User,
   dietaryRestrictions: set of DietaryTag,
-  maxBudget: BudgetTier,
-  maxWalkMinutes?: Number,
+  budgetPreference: BudgetTier,
+  walkPreferenceMinutes?: Number,
   cuisinePreferences: set of String,
   notes?: String
 ) : returns ()
-  where maxWalkMinutes is absent or maxWalkMinutes > 0
+  where walkPreferenceMinutes is absent or walkPreferenceMinutes > 0
   then
-    create or update the profile for user with dietaryRestrictions, maxBudget, maxWalkMinutes, cuisinePreferences, and notes
+    create or update the profile for user with dietaryRestrictions, budgetPreference, walkPreferenceMinutes, cuisinePreferences, and notes
     returns
-  where maxWalkMinutes is present and maxWalkMinutes <= 0
+  where walkPreferenceMinutes is present and walkPreferenceMinutes <= 0
   then
-    refuses INVALID_DISTANCE "Maximum walking time must be positive."
+    refuses INVALID_DISTANCE "Preferred walking time must be positive."
 
 clearProfile(user: User) : returns ()
   where a profile exists for user
@@ -518,38 +598,32 @@ clearProfile(user: User) : returns ()
 ```queries
 _getProfile(user: User) : optional (
   dietaryRestrictions: set of DietaryTag,
-  maxBudget: BudgetTier,
-  maxWalkMinutes: Number | undefined,
+  budgetPreference: BudgetTier,
+  walkPreferenceMinutes: Number | undefined,
   cuisinePreferences: set of String,
   notes: String | undefined
 )
-  Returns user's stored profile so they can view or edit it, or no row if none is set.
+  Returns user's stored profile, or no row if none is set.
 
-_summarizeGroup(users: set of Users) : one (
-  requiredDiets: set of DietaryTag,
-  dietaryBreakdown: set of (tag: DietaryTag, count: Number),
-  tightestBudget: BudgetTier,
-  tightestWalkMinutes: Number | undefined,
+_getProfiles(users: set of Users) : many (
+  user: User,
+  dietaryRestrictions: set of DietaryTag,
+  budgetPreference: BudgetTier,
+  walkPreferenceMinutes: Number | undefined,
   cuisinePreferences: set of String,
-  profiledCount: Number
+  notes: String | undefined
 )
-  Aggregates profiles across users anonymously without returning any User identity:
-  requiredDiets is the union of dietaryRestrictions;
-  dietaryBreakdown counts how many profiled users require each tag;
-  tightestBudget is the minimum maxBudget under FREE < BUDGET < MODERATE < UPSCALE (or UPSCALE if none profiled);
-  tightestWalkMinutes is the minimum present maxWalkMinutes (or undefined if none set);
-  cuisinePreferences is the union of preferred cuisines;
-  profiledCount is the number of users in users who have a Profile.
+  Returns the stored profile for each user in users who has a Profile, omitting users with no Profile.
 ```
 
 #### Note
-- **Strictly `Profiling`, not matching or recommending:** The application does **not** maintain a restaurant database, score restaurant compatibility, or match users to users or restaurants. `Profiling` holds each user's constraints once and exposes `_summarizeGroup` so the host and reserved guests quietly see e.g. *"1 halal, 1 vegetarian; max budget: BUDGET; max walk: 15 min"* before proposing or voting on options in `Polling`.
-- **Anonymity by construction:** `_summarizeGroup` never returns individual `User` identities or individual profiles to other guests, addressing Noah's hesitation in BS1 and Ethical Analysis #2.
-- **Open issue to resolve:** Free-text `notes` (e.g., severe allergy details) could inadvertently identify someone; before Beta we should decide whether `notes` stays visible only to the host or is omitted from `_summarizeGroup`.
+- **Qualitative human judgment instead of deterministic restriction:** Earlier drafts computed a deterministic "most restrictive" minimum budget and walk time across the group. That can falsely rule out options—a student who normally prefers `BUDGET` may happily stretch to `MODERATE` for a holiday dinner. Returning participants' dining profiles via `_getProfiles` lets the host and guests weigh preferences qualitatively (e.g., noticing one halal requirement and a general preference for inexpensive nearby spots) without building any matching or recommendation engine.
+- **Privacy boundary (tablemate-scoped vs. public vs. anonymized):** Making profiles fully public to anyone holding a forwarded Zoom link would expose personal dietary, religious, and budget information to casual bystanders; therefore, the `viewTableProfiles` reaction restricts `_getProfiles` to the gathering's host and active reservation holders.
+- **Open issue to resolve:** Even within a table, showing named profiles vs. hiding `user` identities (so shy peers like Noah do not feel singled out for a restriction or lower budget) is a clear UX tradeoff. During F6 user testing we will test whether tablemate-scoped profiles should display names (helpful for allergy follow-up) or omit names at the UI layer.
 
 ---
 
-### 6. Polling
+### 7. Polling
 
 **Purpose:** Let a participating group propose options and converge on a single choice without endless chat negotiation.
 
@@ -675,12 +749,12 @@ _getVoterChoices(poll: Poll, voter: Voter) : many (option: Option)
 
 #### Note
 - **No duplicated deadline state:** Like `Reserving`, `Polling` does not duplicate `Hosting.cutoffTime`; it stays `OPEN` until `closePoll` or `cancelPoll` is invoked by reaction when the gathering hits cutoff or closes.
-- **Human-proposed options + approval voting:** `Polling` owns its own `Options` (`label` + optional `note` like `"~$$, halal options"`). Participants read `Profiling._summarizeGroup` and propose/approve options that fit everyone; approval voting avoids 1–1–1–1 ties in small groups.
+- **Human-proposed options + approval voting:** `Polling` owns its own `Options` (`label` + optional `note` like `"~$$, halal options"`). Participants read tablemates' dining profiles (`Profiling._getProfiles` via `viewTableProfiles`) and propose/approve options that fit the group; approval voting avoids 1–1–1–1 ties in small groups.
 - **Open issue to resolve:** If a poll-enabled gathering reaches `cutoffTime` with zero proposed options, `closePoll` refuses. In Beta we should notify the host ahead of cutoff if no options have been proposed yet.
 
 ---
 
-### 7. Notifying
+### 8. Notifying
 
 **Purpose:** Deliver timely event updates and scheduled pre-cutoff reminders strictly to participating recipients, cancelling pending reminders if plans change so bystanders and former participants are never spammed.
 
@@ -765,22 +839,22 @@ _listDueScheduled(now: DateTime) : many (notification: Notification, recipient: 
 
 ## Essential Reactions
 
-The reactions below capture how the seven independent concepts compose to realize Zoom-link creation and resolution, domain/address access control, reservation and waitlist flow, poll coordination, and reminder hygiene.
+The reactions below capture how the eight independent concepts compose to realize Zoom-link creation and resolution, pre-auth invite acceptance with automatic post-verification completion, reservation/waitlist management, poll coordination, and reminder hygiene.
 
-### A. Access Control & Zoom-Link Resolution
+### A. Access Control, Zoom-Link Resolution & Inviting
 
 #### 1. `createGatheringAuthorized` & `createInitialLinkOnCreate`
 ```
 reaction createGatheringAuthorized
 when Requesting.createGathering (
   actor, title, startTime, endTime, cutoffTime,
-  budgetTier, dietaryNotes, scope, listedOnBoard, area, confirmedVenue, now
+  details, scope, listedOnBoard, area, confirmedVenue, now
 )
 where Authenticating: actor is in Users
   and (scope is absent or Authenticating: _hasDomain(actor, scope) is true)
 then Hosting.create (
   host: actor, title, startTime, endTime, cutoffTime,
-  budgetTier, dietaryNotes, scope, listedOnBoard, area, confirmedVenue, now
+  details, scope, listedOnBoard, area, confirmedVenue, now
 )
 
 reaction createInitialLinkOnCreate
@@ -788,40 +862,97 @@ when
   Requesting.createGathering (actor, linkLabel, now)
   Hosting.create () : returns (gathering)
 then
-  LinkSharing.createLink (target: gathering, creator: actor, label: linkLabel, expiresAt: undefined, now)
+  Linking.createLink (target: gathering, creator: actor, label: linkLabel, expiresAt: undefined, now)
 ```
-**Note:** Requires the host to be authenticated (`Authenticating`) and—if they set an institutional `scope` like `"mit.edu"`—verified in that domain themselves (Ethical Analysis #7). Upon creation, `LinkSharing` automatically issues the first shareable link for the host to drop into a chat or email; the host can also create or revoke additional links later via `LinkSharing.createLink` / `LinkSharing.revokeLink`.
+**Note:** Requires the host to be authenticated (`Authenticating`) and—if they set an institutional `scope` like `"mit.edu"`—verified in that domain themselves (Ethical Analysis #7). Upon creation, `Linking` issues the first shareable link for the host to drop into a chat or email; additional links can be created or revoked via `Linking.createLink` / `Linking.revokeLink`.
 
 #### 2. `viewByLink`
 ```
 reaction viewByLink
 when Requesting.viewByLink (token, now)
-where LinkSharing: _resolve(token, now) returns (target, link)
+where Linking: _resolve(token, now) returns (target, link)
 then
   Hosting._getDetails (gathering: target)
   Reserving._getAvailability (resource: target)
 ```
 **Note:** Embodies the Zoom-link model: anyone with an active shared `token` can view gathering details (`area`, `confirmedVenue`, terms, live remaining spots) without signing in or having an identity-bound link (Ethical Analysis #3).
 
-#### 3. `reserveByLinkAuthorized` & `joinWaitlistByLinkAuthorized`
+#### 3. `acceptByLinkAuthorized` (Authenticated Guest)
 ```
-reaction reserveByLinkAuthorized
-when Requesting.reserveByLink (actor, token, now)
-where LinkSharing: _resolve(token, now) returns (target, link)
-  and Hosting: target is gathering with status OPEN or CONFIRMED
-  and (gathering's scope is absent or Authenticating: _hasDomain(actor, gathering's scope) is true)
-then Reserving.reserve (resource: target, user: actor)
-
-reaction joinWaitlistByLinkAuthorized
-when Requesting.joinWaitlistByLink (actor, token, now)
-where LinkSharing: _resolve(token, now) returns (target, link)
-  and Hosting: target is gathering with status OPEN or CONFIRMED
-  and (gathering's scope is absent or Authenticating: _hasDomain(actor, gathering's scope) is true)
-then Reserving.joinWaitlist (resource: target, user: actor)
+reaction acceptByLinkAuthorized
+when Requesting.acceptByLink (actor, token, now)
+where Linking: _resolve(token, now) returns (target, link)
+  and Hosting: target is a gathering with status OPEN or CONFIRMED
+  and Reserving: pool for target is not locked
+  and (Hosting: target's scope is absent or Authenticating: _hasDomain(actor, target's scope) is true)
+then Inviting.accept (event: target, guest: actor)
 ```
-**Note:** Multiple peers in a group chat resolve the same `token`, and any authenticated user matching the gathering's optional `scope` can reserve directly without manual host approval (Ethical Analysis #2, #5).
+**Note:** When an already-authenticated user follows a shared `token` and clicks accept, this reaction checks that the gathering is open and matches any `scope` requirement before recording `Inviting.accept`.
 
-#### 4. `proposeAndVoteAuthorized`
+#### 4. `acceptByLinkPendingAuth` & `completePendingInviteOnVerify` (Unauthenticated Guest Flow)
+```
+reaction acceptByLinkPendingAuth
+when Requesting.acceptByLinkWithEmail (email, token, now)
+where Linking: _resolve(token, now) returns (target, link)
+  and Hosting: target is gathering with status OPEN or CONFIRMED
+  and Reserving: pool for target is not locked
+then
+  Inviting.deferAccept (event: target, contact: email)
+  Authenticating.requestCode (email, now)
+
+reaction acceptPendingInviteOnVerify
+when Authenticating.verifyCode (email) : returns (user)
+where Inviting: event is in _getPendingForContact(contact: email)
+  and Hosting: event is a gathering with status OPEN or CONFIRMED
+  and Reserving: pool for event is not locked
+  and (Hosting: event's scope is absent or Authenticating: _hasDomain(user, event's scope) is true)
+then
+  Inviting.clearPending (event, contact: email)
+  Inviting.accept (event, guest: user)
+
+reaction clearIneligiblePendingOnVerify
+when Authenticating.verifyCode (email) : returns (user)
+where Inviting: event is in _getPendingForContact(contact: email)
+  and (
+    Hosting: event's status is not OPEN and not CONFIRMED
+    or Reserving: pool for event is locked
+    or (Hosting: event's scope is present and Authenticating: _hasDomain(user, event's scope) is false)
+  )
+then
+  Inviting.clearPending (event, contact: email)
+```
+**Note:** Realizes the two-step pre-authentication acceptance flow. Whether the person has never created an account or is returning on an unauthenticated browser, clicking accept with their email records a pending acceptance in `Inviting` and triggers `Authenticating.requestCode`. As soon as `Authenticating.verifyCode` succeeds, `acceptPendingInviteOnVerify` automatically clears the pending tracker and fires `Inviting.accept` (which triggers seat reservation below); if the gathering closed or their email domain did not match `scope`, `clearIneligiblePendingOnVerify` discards the stale pending entry without calling `accept`. *(Open issue: `requestCode` fires here even if `email` does not match `gathering.scope`; before Beta we can optionally check domain format early at `acceptByLinkWithEmail` for better UX.)*
+
+#### 5. `reserveOrWaitlistOnAccept` & `releaseOnWithdraw`
+```
+reaction reserveOnInviteAccept
+when Inviting.accept (event, guest)
+where Reserving: _getAvailability(resource: event) has remaining > 0 and locked is false
+then Reserving.reserve (resource: event, user: guest)
+
+reaction waitlistOnInviteAccept
+when Inviting.accept (event, guest)
+where Reserving: _getAvailability(resource: event) has remaining = 0 and locked is false
+then Reserving.joinWaitlist (resource: event, user: guest)
+
+reaction withdrawAuthorized
+when Requesting.withdrawInvite (actor, gathering)
+where Reserving: pool for gathering is not locked
+then Inviting.withdraw (event: gathering, guest: actor)
+
+reaction releaseReservationOnWithdraw
+when Inviting.withdraw (event, guest)
+where Reserving: reservation is _getReservation(resource: event, user: guest)
+then Reserving.cancel (reservation)
+
+reaction leaveWaitlistOnWithdraw
+when Inviting.withdraw (event, guest)
+where Reserving: _getWaitlistPosition(resource: event, user: guest) is present
+then Reserving.leaveWaitlist (resource: event, user: guest)
+```
+**Note:** Bridges `Inviting` and `Reserving` symmetrically without duplicating seat state inside `Inviting`. Accepting reserves a spot if open or joins the waitlist if full; withdrawing (only available to guests who already accepted) cancels any held reservation or waitlist entry while the pool is unlocked and leaves no persistent declined state blocking re-acceptance.
+
+#### 6. `proposeAndVoteAuthorized`
 ```
 reaction proposeOptionAuthorized
 when Requesting.proposeOption (actor, gathering, label, note)
@@ -841,7 +972,7 @@ then Polling.castVote (poll, voter: actor, option)
 
 ### B. Gathering Setup, Confirmation & Cutoff Lifecycle
 
-#### 5. `openPoolOnCreate`
+#### 7. `openPoolOnCreate`
 ```
 reaction openPoolOnCreate
 when
@@ -852,7 +983,7 @@ then
 ```
 **Note:** Keeps seat-capacity state out of `Hosting` while ensuring every gathering gets a bounded reservation pool.
 
-#### 6. `openPollOnCreate` & `seedInitialOptionsOnCreate`
+#### 8. `openPollOnCreate` & `seedInitialOptionsOnCreate`
 ```
 reaction openPollOnCreate
 when
@@ -871,7 +1002,7 @@ then
 ```
 **Note:** Fixed-venue gatherings (`enablePoll: false`, `confirmedVenue` provided) never touch `Polling`. When `enablePoll` is true, `Polling` opens a shortlist poll and seeds any initial suggestions entered by the host.
 
-#### 7. `scheduleHostConfirmReminder`
+#### 9. `scheduleHostConfirmReminder`
 ```
 reaction scheduleHostConfirmReminder
 when Hosting.create (host, title, cutoffTime) : returns (gathering)
@@ -885,7 +1016,7 @@ then Notifying.schedule (
 ```
 **Note:** Reminds legitimate hosts to confirm before `cutoffTime` so their table is not closed by `expireUnconfirmed`.
 
-#### 8. `handleCutoffAndPollClose`
+#### 10. `handleCutoffAndPollClose`
 ```
 reaction closeUnconfirmedAtCutoff
 when System.tick (now)
@@ -916,7 +1047,7 @@ then
 ```
 **Note:** Centralizes deadline handling in `Hosting.cutoffTime` so neither `Reserving` nor `Polling` needs its own clock logic. At cutoff, unconfirmed gatherings expire and drop off the board, confirmed gatherings lock reservations, and open polls select a winning venue and write it onto `Hosting`.
 
-#### 9. `cleanupOnGatheringStop`
+#### 11. `cleanupOnGatheringStop`
 ```
 reaction cleanupOnGatheringStop
 when Hosting.cancel (gathering)
@@ -952,7 +1083,7 @@ then
 
 ### C. Live Seat Reopening, Waitlist Promotion & Reminder Hygiene
 
-#### 10. `scheduleReminderOnReserve`
+#### 12. `scheduleReminderOnReserve`
 ```
 reaction scheduleReminderOnReserve
 when Reserving.reserve (resource, user)
@@ -967,7 +1098,7 @@ then Notifying.schedule (
 ```
 **Note:** Reminders go strictly to users holding a reservation (Ethical Analysis #3). *(Edge case: if `now >= cutoffTime - 2 hours` when reserving, implementation skips scheduling a past-due reminder.)*
 
-#### 11. `cleanupOnReservationCancel`
+#### 13. `cleanupOnReservationCancel`
 ```
 reaction cancelReminderOnReservationCancel
 when Reserving.cancel () : returns (resource, user)
@@ -981,7 +1112,7 @@ then Polling.clearVoterVotes (poll, voter: user)
 ```
 **Note:** Cancels pending reminders so withdrawn guests are never pinged, and clears their poll votes so ex-guests cannot bias the venue choice for the remaining group.
 
-#### 12. `promoteWaitlistOnCancel`
+#### 14. `promoteWaitlistOnCancel`
 ```
 reaction promoteWaitlistOnCancel
 when Reserving.cancel () : returns (resource, user)
@@ -1008,19 +1139,19 @@ then
     sendAt: cutoffTime - 2 hours
   )
 ```
-**Note:** Directly solves Bad Situations 2 and 3. When a reservation is cancelled while unlocked, either the spot immediately reopens on existing `LinkSharing` links (if the waitlist is empty) or the next waitlisted peer is promoted, notified, and scheduled for a cutoff reminder—without noisy channel re-blasts.
+**Note:** Directly solves Bad Situations 2 and 3. When a reservation is cancelled while unlocked, either the spot immediately reopens on existing `Linking` links (if the waitlist is empty) or the next waitlisted peer is promoted, notified, and scheduled for a cutoff reminder—without noisy channel re-blasts.
 
 ---
 
-### D. Anonymous Group Constraint Summary
+### D. Tablemate Dining Profiles
 
-#### 13. `viewGroupConstraints`
+#### 15. `viewTableProfiles`
 ```
-reaction viewGroupConstraints
-when Requesting.viewGroupConstraints (actor, gathering)
+reaction viewTableProfiles
+when Requesting.viewTableProfiles (actor, gathering)
 where (Hosting: actor is host of gathering or Reserving: _hasReservation(resource: gathering, user: actor) is true)
   and Hosting: host is gathering's host
   and Reserving: reserved is _getReservedUsers(gathering)
-then Profiling._summarizeGroup (users: {host} union reserved)
+then Profiling._getProfiles (users: {host} union reserved)
 ```
-**Note:** Connects `Profiling` to `Hosting` and `Reserving` without embedding any recommendation or matching logic. Including `host` alongside `reserved` ensures the organizer's own dietary/budget constraints (e.g., Noah in BS1) are reflected anonymously in the summary while keeping individual profiles private from link viewers and peers.
+**Note:** Connects `Profiling` to `Hosting` and `Reserving` so the host and reserved guests can review tablemates' dining preferences qualitatively when proposing and voting on restaurants, while withholding profiles from unreserved link viewers and public boards. Whether the UI displays names alongside these profiles or omits names to protect shy participants remains an explicit decision to evaluate in user testing.
