@@ -12,7 +12,7 @@ This plan covers what we expect to deliver at each checkpoint, who owns each pie
 | F6 User testing | Mon, Dec 7 | Results from sessions where participants act out the Noah and Alice situations on the real app, plus the fixes we make in response |
 | F7 Demo and report | Wed, Dec 9 | Final demo, project report, and cleanup of the repo and README |
 
-Thanksgiving falls on Nov 26, between the Alpha and Beta deadlines, and several of us will be away or busy. To protect the Beta, we aim to finish the Alpha by Sat, Nov 21, so that the break week is spent on the waitlist, the board, and styling, not on getting the basics to run. The only work that depends on everyone being present is the Beta integration, which we schedule for Sat, Nov 28 and Sun, Nov 29.
+Thanksgiving falls on Nov 26, between the Alpha and Beta deadlines, and we will be away or busy. To protect the Beta, we aim to finish the Alpha by Sat, Nov 21, so that the break week is spent on the waitlist, the board, and styling, not on getting the basics to run. The only work that depends on everyone being present is the Beta integration, which we schedule for Sat, Nov 28 and Sun, Nov 29.
 
 ## Responsibilities
 
