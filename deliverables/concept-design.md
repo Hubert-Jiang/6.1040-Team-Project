@@ -10,12 +10,12 @@ Our app helps acquaintances within trusted communities move from *"anyone free?"
 4. **`Inviting`** records guest acceptances to an event (with clean withdrawal for guests whose plans change) and tracks pending email-keyed acceptances (`PendingAcceptances`) while an unauthenticated prospective guest completes email verification, automatically accepting the invite once verified. Uninterested peers simply ignore the shared link without needing an account or a declined cookie.
 5. **`Reserving`** manages bounded capacities, explicit reservations, cancellations, cutoff locking, and FIFO waitlist promotion for a generic `Resource`. Separating reservation mechanics from `Hosting` and `Inviting` lets cancelled spots reopen automatically on the same shared link.
 6. **`Profiling`** stores each user's reusable dining preferences and restrictions (dietary needs, budget preference, walking preference, cuisine tastes, notes) so table participants can view each other's dining profiles to make a qualitative group decision without public chat clutter. It performs **no** restaurant recommendations, user-to-user matching, or deterministic filtering.
-7. **`Polling`** runs approval polls where participating members propose candidate options and vote on a shortlist until closed, keeping voting independent of gathering timing and venue databases.
+7. **`Polling`** runs approval polls for gatherings where the host has not pre-selected a restaurant: if the host already has a restaurant in mind (`confirmedVenue` is set at creation), no poll is created; if the host leaves the restaurant unselected, `Polling` opens automatically so invitees can propose and vote on options until cutoff.
 8. **`Notifying`** delivers immediate updates and cancellable scheduled reminders strictly to participating recipients (`Recipient`, `Subject`), keeping bystanders untouched and cancelling pending reminders when reservations are released.
 
 ### Two Ways to Choose a Venue
 
-A host chooses the venue in one of two ways when creating a gathering. A host who already has a restaurant or dining hall in mind (Alice in BS2 or Maya in BS3) enters it as `confirmedVenue`, so guests simply claim seats and `Polling` is never involved. That host can mark the gathering booked whenever they make the reservation, either right after creating it or once the headcount settles at the cutoff. A host who only has a time window and area (Noah in BS1) instead sets `enablePoll` and can seed a few suggestions, after which the host and seated guests propose and vote on options until the cutoff, when the winning option becomes the `confirmedVenue` (reactions 8 and 10).
+A host chooses the venue in one of two ways when creating a gathering. A host who already has a restaurant or dining hall in mind (Alice in BS2 or Maya in BS3) enters it as `confirmedVenue`, so guests simply claim seats and no poll is created (`Polling` is never involved). That host can mark the gathering booked whenever they make the reservation, either right after creating it or once the headcount settles at the cutoff. A host who only has a time window and area (Noah in BS1) instead leaves `confirmedVenue` unset (and can seed a few initial suggestions), which automatically opens a `Polling` poll so the host and accepted invitees can propose and vote on options until the cutoff, when the winning option becomes `confirmedVenue` (reactions 8 and 10).
 
 ### Access Model & Why There Is No Separate `Authorizing` Concept
 
@@ -101,13 +101,13 @@ _hasDomain(user: User, domain: String) : one (matches: Flag)
 #### Note
 - **Code generation inside `Authenticating`:** `requestCode` generates the one-time code itself rather than accepting it from the caller, and returns `code` so a reaction can dispatch it over email (or log/display in local dev).
 - **Minimal user identity:** `Users` stores only `email` and `domain`—no bios, avatars, or follower lists (Ethical Analysis #2, #6). HTTP session cookies belong to the web request boundary rather than `Authenticating`.
-- **Open issue to resolve:** If a dorm or club wants board visibility scoped narrower than `@mit.edu`, the primary mechanism is sharing a `Linking` link in that group's chat/list; if explicit roster checks are later needed, an `Authorizing` concept can be added cleanly without modifying `Authenticating`.
+- **Open issue to resolve:** Narrower group scoping (e.g., a single dorm floor or cultural club) currently relies on the host sharing a `Linking` link only inside that group's chat or mailing list; if explicit roster checks are later needed alongside a community board, an `Authorizing` concept can be added cleanly without modifying `Authenticating`.
 
 ---
 
 ### 2. Hosting
 
-**Purpose:** Manage the lifecycle, basic event details, and active-table limits of informal meal gatherings so hosts cannot leave unconfirmed gatherings active or spam community boards.
+**Purpose:** Manage the lifecycle, basic event details, and active-table limits of informal meal gatherings so hosts cannot leave unconfirmed gatherings active or spam shared channels.
 
 **Principle:** A host creates a meal gathering within their active-table limit, setting its time window, cutoff, area, and optional event details or venue. The host must confirm the gathering before its cutoff or it automatically closes; once confirmed with a venue, it can be marked booked and closes when its time window ends.
 
@@ -130,12 +130,10 @@ a set of Gatherings with
   a cutoffTime DateTime
   an optional details String
   an optional scope String
-  a listedOnBoard Flag
   a area String
   an optional confirmedVenue String
   Rule: cutoffTime <= startTime and startTime < endTime
   Rule: each Host has at most 3 Gatherings with status OPEN or CONFIRMED
-  Rule: if listedOnBoard is true then scope is present
 ```
 
 #### Actions
@@ -148,7 +146,6 @@ create(
   cutoffTime: DateTime,
   details?: String,
   scope?: String,
-  listedOnBoard: Flag,
   area: String,
   confirmedVenue?: String,
   now: DateTime
@@ -159,7 +156,6 @@ create(
     and cutoffTime <= startTime
     and startTime < endTime
     and host currently has fewer than 3 Gatherings with status OPEN or CONFIRMED
-    and (listedOnBoard is false or scope is non-empty)
   then
     add a new gathering with status OPEN and the given fields
     returns gathering
@@ -169,9 +165,6 @@ create(
   where cutoffTime > startTime or startTime >= endTime or now >= cutoffTime
   then
     refuses INVALID_SCHEDULE "Gathering requires valid future cutoff, start, and end times."
-  where listedOnBoard is true and (scope is missing or empty)
-  then
-    refuses MISSING_SCOPE "Board-listed gatherings must specify a community scope."
 
 confirm(gathering: Gathering, host: Host, now: DateTime) : returns ()
   where gathering is in Gatherings and gathering's host is host and gathering's status is OPEN and now <= gathering's cutoffTime
@@ -236,29 +229,19 @@ _getDetails(gathering: Gathering) : optional (
   cutoffTime: DateTime,
   details: String | undefined,
   scope: String | undefined,
-  listedOnBoard: Flag,
   area: String,
   confirmedVenue: String | undefined
 )
   Returns details of gathering, or no row if gathering does not exist.
-
-_listBoard(scope: String, fromTime: DateTime, toTime: DateTime) : many (
-  gathering: Gathering,
-  title: String,
-  status: GatheringStatus,
-  startTime: DateTime,
-  cutoffTime: DateTime,
-  area: String,
-  confirmedVenue: String | undefined
-)
-  Returns gatherings where listedOnBoard is true, scope matches, status is OPEN or CONFIRMED or BOOKED, and startTime falls in [fromTime, toTime], ordered ascending by startTime.
 ```
 
 #### Note
+- **Zoom-link-only distribution (public boards/feeds deferred):** Gatherings do not appear on any public in-app board or feed; peers reach a table exclusively through a `Linking` URL shared by the host in an existing chat or mailing list. Deferring public boards has several advantages: (1) stronger privacy, since hosts do not broadcast their schedules or dining plans across an entire institution; (2) lower no-show and flake risk, since acquaintances arriving from a shared social/workplace channel are less likely to flake or clash socially than strangers browsing an open feed; (3) reduced moderation and anti-spam scope, since there is no global discovery feed to patrol for spam or reappropriation; and (4) less user friction, since hosts keep using the channels they already check. Like potlucks and game nights, an opt-in community board can be re-introduced later if break-staying newcomers need broader discovery.
 - **Why structured budget/dietary tags live in `Profiling`, not `Hosting`:** Previously `Hosting` duplicated `BudgetTier` and `dietaryNotes`, which forced hosts to specify a budget even when no venue had been chosen yet and conflated gathering lifecycle with dining preferences. Free-form `details` lets a host jot down event context (e.g., *"Tapas ~$25"* or *"Maseeh guest swipes"*) when relevant, while all structured dietary/budget preferences live exclusively in `Profiling`.
 - **Scoped strictly to restaurant and dining-hall meals:** Potlucks, game nights, dish/contribution expectations, and private home-address gating are intentionally omitted from this version to keep `Hosting` small and focused. If home potlucks or game nights are added later, gathering types, contribution terms, and gated private addresses can extend `Hosting` without changing `Linking`, `Inviting`, `Reserving`, `Profiling`, `Polling`, or `Notifying`.
-- **Focused responsibilities:** `Hosting` stores no seat capacities (`Reserving`), shareable URL tokens (`Linking`), guest invite states (`Inviting`), or poll mode flags (implied when `confirmedVenue` starts unset and a `Polling` poll is opened).
-- **Anti-spam lifecycle:** The 3-active-gathering cap per host and automatic `expireUnconfirmed` closure after `cutoffTime` prevent board clutter and abandoned tables (Ethical Analysis #7).
+- **Two-option restaurant choice (no poll when a restaurant is chosen):** Gatherings support two clear modes driven directly by `confirmedVenue`. Option 1 (fixed restaurant): if the host already has a restaurant or dining hall in mind and provides `confirmedVenue` at creation, no poll is ever created. Option 2 (invitee vote): if the host leaves `confirmedVenue` unset at creation, a reaction automatically opens a `Polling` poll so invitees can propose and vote on restaurants before `cutoffTime`.
+- **Focused responsibilities:** `Hosting` stores no seat capacities (`Reserving`), shareable URL tokens (`Linking`), guest invite states (`Inviting`), or separate poll-mode booleans (implied directly by whether `confirmedVenue` is present at creation).
+- **Anti-spam lifecycle:** The 3-active-gathering cap per host and automatic `expireUnconfirmed` closure after `cutoffTime` prevent abandoned tables and spam link generation (Ethical Analysis #7).
 - **Open issue to resolve:** Requiring an explicit `confirm` click before `cutoffTime` protects against ghost tables, but could close a valid gathering if a host forgets. We pair it with a reminder 1 hour before cutoff via `Notifying`, and will test in Alpha/Beta whether explicit confirmation feels natural.
 
 ---
@@ -752,6 +735,7 @@ _getVoterChoices(poll: Poll, voter: Voter) : many (option: Option)
 ```
 
 #### Note
+- **Two-option restaurant choice:** `Polling` is used *only* when the host does not select a restaurant at gathering creation (`confirmedVenue` is absent). Whenever a host already has a restaurant in mind, no poll is created or needed.
 - **No duplicated deadline state:** Like `Reserving`, `Polling` does not duplicate `Hosting.cutoffTime`; it stays `OPEN` until `closePoll` or `cancelPoll` is invoked by reaction when the gathering hits cutoff or closes.
 - **Human-proposed options + approval voting:** `Polling` owns its own `Options` (`label` + optional `note` like `"~$$, halal options"`). Participants read tablemates' dining profiles (`Profiling._getProfiles` via `viewTableProfiles`) and propose/approve options that fit the group; approval voting avoids 1–1–1–1 ties in small groups.
 - **Open issue to resolve:** If a poll-enabled gathering reaches `cutoffTime` with zero proposed options, `closePoll` refuses. In Beta we should notify the host ahead of cutoff if no options have been proposed yet.
@@ -852,13 +836,13 @@ The reactions below capture how the eight independent concepts compose to realiz
 reaction createGatheringAuthorized
 when Requesting.createGathering (
   actor, title, startTime, endTime, cutoffTime,
-  details, scope, listedOnBoard, area, confirmedVenue, now
+  details, scope, area, confirmedVenue, now
 )
 where Authenticating: actor is in Users
   and (scope is absent or Authenticating: _hasDomain(actor, scope) is true)
 then Hosting.create (
   host: actor, title, startTime, endTime, cutoffTime,
-  details, scope, listedOnBoard, area, confirmedVenue, now
+  details, scope, area, confirmedVenue, now
 )
 
 reaction createInitialLinkOnCreate
@@ -991,20 +975,22 @@ then
 ```
 reaction openPollOnCreate
 when
-  Requesting.createGathering (enablePoll: true)
   Hosting.create () : returns (gathering)
+where Hosting: gathering's confirmedVenue is absent
 then
   Polling.openPoll (topic: gathering)
 
 reaction seedInitialOptionsOnCreate
 when
-  Requesting.createGathering (actor, enablePoll: true, initialOptions)
+  Requesting.createGathering (actor, initialOptions)
+  Hosting.create () : returns (gathering)
   Polling.openPoll () : returns (poll)
-where label is in initialOptions
+where Hosting: gathering's confirmedVenue is absent
+  and label is in initialOptions
 then
   Polling.proposeOption (poll, proposer: actor, label, note: undefined)
 ```
-**Note:** Fixed-venue gatherings (`enablePoll: false`, `confirmedVenue` provided) never touch `Polling`. When `enablePoll` is true, `Polling` opens a shortlist poll and seeds any initial suggestions entered by the host.
+**Note:** Realizes the two-option restaurant choice cleanly without a separate mode flag: if the host provides `confirmedVenue` at creation (already has a restaurant in mind), `openPollOnCreate` does not fire and no poll is created; if the host leaves `confirmedVenue` unset, `Polling.openPoll` runs automatically so invitees can propose and vote on options (seeded with any optional `initialOptions` the host suggested).
 
 #### 9. `scheduleHostConfirmReminder`
 ```
@@ -1049,7 +1035,7 @@ where Hosting: gathering is poll's topic
 then
   Hosting.setVenue (gathering, confirmedVenue: winnerLabel)
 ```
-**Note:** Centralizes deadline handling in `Hosting.cutoffTime` so neither `Reserving` nor `Polling` needs its own clock logic. At cutoff, unconfirmed gatherings expire and drop off the board, confirmed gatherings lock reservations, and open polls select a winning venue and write it onto `Hosting`.
+**Note:** Centralizes deadline handling in `Hosting.cutoffTime` so neither `Reserving` nor `Polling` needs its own clock logic. At cutoff, unconfirmed gatherings expire and close, confirmed gatherings lock reservations, and open polls select a winning venue and write it onto `Hosting`.
 
 #### 11. `cleanupOnGatheringStop`
 ```
@@ -1158,4 +1144,4 @@ where (Hosting: actor is host of gathering or Reserving: _hasReservation(resourc
   and Reserving: reserved is _getReservedUsers(gathering)
 then Profiling._getProfiles (users: {host} union reserved)
 ```
-**Note:** Connects `Profiling` to `Hosting` and `Reserving` so the host and reserved guests can review tablemates' dining preferences qualitatively when proposing and voting on restaurants, while withholding profiles from unreserved link viewers and public boards. Whether the UI displays names alongside these profiles or omits names to protect shy participants remains an explicit decision to evaluate in user testing.
+**Note:** Connects `Profiling` to `Hosting` and `Reserving` so the host and reserved guests can review tablemates' dining preferences qualitatively when proposing and voting on restaurants, while withholding profiles from unreserved link viewers. Whether the UI displays names alongside these profiles or omits names to protect shy participants remains an explicit decision to evaluate in user testing.
