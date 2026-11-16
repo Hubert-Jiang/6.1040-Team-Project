@@ -13,6 +13,10 @@ Our app helps acquaintances within trusted communities move from *"anyone free?"
 7. **`Polling`** runs approval polls where participating members propose candidate options and vote on a shortlist until closed, keeping voting independent of gathering timing and venue databases.
 8. **`Notifying`** delivers immediate updates and cancellable scheduled reminders strictly to participating recipients (`Recipient`, `Subject`), keeping bystanders untouched and cancelling pending reminders when reservations are released.
 
+### Two Ways to Choose a Venue
+
+A host chooses the venue in one of two ways when creating a gathering. A host who already has a restaurant or dining hall in mind (Alice in BS2 or Maya in BS3) enters it as `confirmedVenue`, so guests simply claim seats and `Polling` is never involved. That host can mark the gathering booked whenever they make the reservation, either right after creating it or once the headcount settles at the cutoff. A host who only has a time window and area (Noah in BS1) instead sets `enablePoll` and can seed a few suggestions, after which the host and seated guests propose and vote on options until the cutoff, when the winning option becomes the `confirmedVenue` (reactions 8 and 10).
+
 ### Access Model & Why There Is No Separate `Authorizing` Concept
 
 We considered a standalone `Authorizing` concept for per-resource access control lists, but omitted it as unnecessary complexity under the Zoom-link model:
