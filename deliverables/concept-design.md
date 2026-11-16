@@ -2,12 +2,12 @@
 
 ## Overview: Role of Concepts and Type Instantiation
 
-Our app helps acquaintances within trusted communities move from *"anyone free?"* to a confirmed informal meal using a **Zoom-link sharing model**: a host creates a meal gathering, receives one or more unguessable shareable links (not tied to any recipient's identity), and drops them into existing group chats, mailing lists, or Slacks. When an unauthenticated peer follows a link and clicks accept with their email, their pending acceptance is tracked while they verify their email and automatically completes once authenticated. The design decomposes the application into eight focused, single-purpose concepts:
+Our app helps acquaintances within trusted communities move from *"anyone free?"* to a confirmed informal meal using a **Zoom-link sharing model**: a host creates a meal gathering, receives one or more unguessable shareable links (not tied to any recipient's identity), and drops them into existing group chats, mailing lists, or Slacks. When an unauthenticated peer follows a link and clicks accept, their pending acceptance is tracked across institutional SSO login (MIT Touchstone or Commons login, TBD) and automatically completes once authenticated. The design decomposes the application into eight focused, single-purpose concepts:
 
-1. **`Authenticating`** verifies user identities via one-time institutional email codes and records each user's verified email domain. It gates gathering creation and—when a gathering specifies a community scope—checks domain membership without social profiles or follower lists.
+1. **`Authenticating`** authenticates users via an external institutional identity provider (MIT Touchstone or Commons login, TBD) and records each user's verified email and domain. For scoping purposes, custom email/OTP verification will not be implemented. It gates gathering creation and—when a gathering specifies a community scope—checks domain membership without social profiles or follower lists.
 2. **`Hosting`** manages the meal-gathering lifecycle (`OPEN`, `CONFIRMED`, `BOOKED`, `CLOSED`, `CANCELLED`), basic event metadata (`title`, time window, `area`, optional `details` and `confirmedVenue`), and per-host active-table limits. It stores no capacities, polls, link tokens, or user dietary/budget constraints.
 3. **`Linking`** issues, resolves, and revokes shareable link tokens for generic target resources. Links belong to the target (not to individual guests), so a single link dropped in a group chat can be resolved by many peers, while separate links for different channels can be revoked independently.
-4. **`Inviting`** records guest acceptances to an event (with clean withdrawal for guests whose plans change) and tracks pending email-keyed acceptances (`PendingAcceptances`) while an unauthenticated prospective guest completes email verification, automatically accepting the invite once verified. Uninterested peers simply ignore the shared link without needing an account or a declined cookie.
+4. **`Inviting`** records guest acceptances to an event (with clean withdrawal for guests whose plans change) and tracks pending acceptances (`PendingAcceptances`) keyed by a login-intent token while an unauthenticated prospective guest signs in via SSO, automatically accepting the invite once authenticated. Uninterested peers simply ignore the shared link without needing an account or a declined cookie.
 5. **`Reserving`** manages bounded capacities, explicit reservations, cancellations, cutoff locking, and FIFO waitlist promotion for a generic `Resource`. Separating reservation mechanics from `Hosting` and `Inviting` lets cancelled spots reopen automatically on the same shared link.
 6. **`Profiling`** stores each user's reusable dining preferences and restrictions (dietary needs, budget preference, walking preference, cuisine tastes, notes) so table participants can view each other's dining profiles to make a qualitative group decision without public chat clutter. It performs **no** restaurant recommendations, user-to-user matching, or deterministic filtering.
 7. **`Polling`** runs approval polls for gatherings where the host has not pre-selected a restaurant: if the host already has a restaurant in mind (`confirmedVenue` is set at creation), no poll is created; if the host leaves the restaurant unselected, `Polling` opens automatically so invitees can propose and vote on options until cutoff.
@@ -46,9 +46,9 @@ We considered a standalone `Authorizing` concept for per-resource access control
 
 ### 1. Authenticating
 
-**Purpose:** Verify user identities and institutional email domains via one-time email codes so gatherings can attribute hosts and enforce optional domain checks without passwords, social profiles, or follower lists.
+**Purpose:** Authenticate users via an external institutional identity provider and record each user's verified email and domain so gatherings can attribute hosts and enforce domain checks without passwords, email/OTP verification, social profiles, or follower lists.
 
-**Principle:** A person requests a verification code for their email address and submits the matching code before it expires. Confirming the code authenticates them as a verified user associated with that email and its domain.
+**Principle:** A user signs in through the external institutional provider, which supplies their verified external identifier and email address. On their first login, a new user record is created with that email and its domain; on subsequent logins, the existing user record is returned.
 
 #### Types
 ```types
@@ -57,36 +57,21 @@ We considered a standalone `Authorizing` concept for per-resource access control
 #### State
 ```state
 a set of Users with
+  a unique externalId String
   a unique email String
   a domain String
-
-a set of Challenges with
-  an email String
-  a code String
-  a expiresAt DateTime
 ```
 
 #### Actions
 ```actions
-requestCode(email: String, now: DateTime) : returns (code: String)
-  where email is a well-formed email address
+authenticate(externalId: String, email: String) : returns (user: User)
+  where externalId is non-empty and email is a well-formed email address
   then
-    generate a fresh one-time verification code
-    add a new challenge with email, code, and expiresAt (now + 15 minutes)
-    returns code
-  where email is not well-formed
+    if a user exists with externalId then update email and extracted domain if changed and return user
+    else add a new user with externalId, email, and domain extracted from email and return user
+  where externalId is empty or email is not well-formed
   then
-    refuses INVALID_EMAIL "Please enter a valid email address."
-
-verifyCode(email: String, code: String, now: DateTime) : returns (user: User)
-  where a challenge exists with matching email and code and now <= expiresAt
-  then
-    remove matching challenges for email
-    if no user exists with email then add a new user with email and domain extracted from email
-    returns user
-  where no matching unexpired challenge exists for email and code
-  then
-    refuses INVALID_OR_EXPIRED_CODE "The verification code is invalid or expired."
+    refuses INVALID_IDENTITY "External provider did not supply a valid user identity and email."
 ```
 
 #### Queries
@@ -99,9 +84,9 @@ _hasDomain(user: User, domain: String) : one (matches: Flag)
 ```
 
 #### Note
-- **Code generation inside `Authenticating`:** `requestCode` generates the one-time code itself rather than accepting it from the caller, and returns `code` so a reaction can dispatch it over email (or log/display in local dev).
-- **Minimal user identity:** `Users` stores only `email` and `domain`—no bios, avatars, or follower lists (Ethical Analysis #2, #6). HTTP session cookies belong to the web request boundary rather than `Authenticating`.
-- **Open issue to resolve:** Narrower group scoping (e.g., a single dorm floor or cultural club) currently relies on the host sharing a `Linking` link only inside that group's chat or mailing list; if explicit roster checks are later needed alongside a community board, an `Authorizing` concept can be added cleanly without modifying `Authenticating`.
+- **Scoping decision — no email/OTP verification:** For scoping purposes, custom email/OTP verification will not be implemented. Instead, authentication will use either **MIT Touchstone** or **Commons login (TBD)**, which handles identity and MIT affiliation verification externally and supplies `(externalId, email)` on callback.
+- **Minimal user identity:** `Users` stores only `externalId`, `email`, and `domain`—no passwords, bios, avatars, or follower lists (Ethical Analysis #2, #6). HTTP session cookies belong to the web request boundary rather than `Authenticating`.
+- **Open issue to resolve:** Finalizing between MIT Touchstone and Commons login (and confirming what `externalId` / `email` attributes the chosen provider exposes). Narrower group scoping (e.g., a single dorm floor or cultural club) currently relies on sharing a `Linking` link inside that group's chat or mailing list; if explicit roster checks are later needed, an `Authorizing` concept can be added cleanly without modifying `Authenticating`.
 
 ---
 
@@ -318,9 +303,9 @@ _listForTarget(target: Target) : many (link: Link, token: String, label: String 
 
 ### 4. Inviting
 
-**Purpose:** Record guest acceptances to an event—including tracking pending acceptances by email while a prospective guest verifies their account—so guests can accept seamlessly from a shared link before or after authenticating, without forcing uninterested peers to register just to say no.
+**Purpose:** Record guest acceptances to an event—including tracking pending acceptances across an unauthenticated guest's SSO sign-in—so guests can accept seamlessly from a shared link before or after authenticating, without forcing uninterested peers to sign in just to say no.
 
-**Principle:** An authenticated guest accepts an event directly (and may withdraw later if plans change). When an unauthenticated person accepts using a contact email, a pending acceptance is recorded for that email and event; once they verify their account, the pending acceptance automatically completes as an accepted invitation.
+**Principle:** An authenticated guest accepts an event directly (and may withdraw later if plans change). When an unauthenticated person clicks accept, a pending acceptance is recorded against an opaque login-intent key; once they complete external SSO authentication, the pending acceptance automatically completes as an accepted invitation.
 
 #### Types
 ```types
@@ -340,8 +325,8 @@ a set of Acceptances with
 
 a set of PendingAcceptances with
   an Event
-  a contact String
-  unique event and contact
+  a pendingKey String
+  unique event and pendingKey
 ```
 
 #### Actions
@@ -364,19 +349,19 @@ withdraw(event: Event, guest: Guest) : returns ()
   then
     refuses NOT_ACCEPTED "You have not accepted this invitation."
 
-deferAccept(event: Event, contact: String) : returns ()
-  where contact is a well-formed email address
+deferAccept(event: Event, pendingKey: String) : returns ()
+  where pendingKey is non-empty
   then
-    if no PendingAcceptance exists for (event, contact) then add a new pending acceptance with event and contact
+    if no PendingAcceptance exists for (event, pendingKey) then add a new pending acceptance with event and pendingKey
     returns
-  where contact is not well-formed
+  where pendingKey is empty
   then
-    refuses INVALID_CONTACT "Please enter a valid email address."
+    refuses INVALID_PENDING_KEY "A non-empty pending key is required."
 
-clearPending(event: Event, contact: String) : returns ()
+clearPending(event: Event, pendingKey: String) : returns ()
   where true
   then
-    remove any PendingAcceptance with matching event and contact
+    remove any PendingAcceptance with matching event and pendingKey
     returns
 ```
 
@@ -385,15 +370,15 @@ clearPending(event: Event, contact: String) : returns ()
 _isAccepted(event: Event, guest: Guest) : one (accepted: Flag)
   Returns accepted true if an Acceptance exists for (event, guest); otherwise false.
 
-_getPendingForContact(contact: String) : many (event: Event)
-  Returns all events with a PendingAcceptance for contact in unspecified order, or no rows if none exist.
+_getPendingForKey(pendingKey: String) : many (event: Event)
+  Returns all events with a PendingAcceptance for pendingKey in unspecified order, or no rows if none exist.
 ```
 
 #### Note
-- **Why there is no `decline` action or declined cookie:** Under a Zoom-link model, uninterested bystanders simply ignore or close the link with zero account creation and zero friction (aligned with keeping non-participants undisturbed). Requiring an account to decline forces bystanders to register, while a browser "declined" cookie breaks across devices and complicates changing one's mind after an accidental click or freed-up evening. Removing an existing `Acceptance` via `withdraw` lets an already-authenticated guest release their spot cleanly while remaining free to re-accept later before cutoff.
-- **Why `PendingAcceptances` lives in `Inviting` (tracker pattern):** Before verifying an email code in `Authenticating`, an arriving guest has no `Guest` identity yet—only a `contact` email string. Storing `(event, contact)` in `PendingAcceptances` lets a reaction call `Authenticating.requestCode` and then automatically complete `Inviting.accept` (and thus `Reserving.reserve`) as soon as `Authenticating.verifyCode` returns `(user)`.
+- **Why there is no `decline` action or declined cookie:** Under a Zoom-link model, uninterested bystanders simply ignore or close the link with zero account creation and zero friction (aligned with keeping non-participants undisturbed). Requiring an account to decline forces bystanders to sign in, while a browser "declined" cookie breaks across devices and complicates changing one's mind after an accidental click or freed-up evening. Removing an existing `Acceptance` via `withdraw` lets an already-authenticated guest release their spot cleanly while remaining free to re-accept later before cutoff.
+- **Why `PendingAcceptances` uses `pendingKey` instead of email/OTP:** Because external SSO (MIT Touchstone or Commons login, TBD) returns the user's verified email only *after* the redirect completes, `deferAccept` keys the pending acceptance by an opaque `pendingKey` (carried across the SSO state/session) rather than asking for an email/OTP first. As soon as `Authenticating.authenticate` returns `(user)` for that `pendingKey`, `acceptPendingInviteOnAuth` automatically completes `Inviting.accept` and triggers `Reserving.reserve`.
 - **Separation from `Linking` and `Reserving`:** `Inviting` knows nothing about URL tokens (`Linking`) or seat capacities and waitlists (`Reserving`). `accept` expresses the guest's intent to join; reactions translate `accept` into reserving a seat (or joining the waitlist if full) and translate `withdraw` into releasing any held seat or waitlist spot.
-- **Open issue to resolve:** If an unauthenticated user accepts via `deferAccept` while 1 seat remains, and another user claims that seat before they finish verifying their email, `acceptPendingInviteOnVerify` will still accept the invite and automatically place them on the waitlist via `waitlistOnInviteAccept`. We should make sure the post-verification UI clearly states whether they got a confirmed seat or landed #1 on the waitlist, and consider expiring stale `PendingAcceptances` if they never verify.
+- **Open issue to resolve:** If an unauthenticated user triggers `deferAccept` while 1 seat remains, and another user claims that seat before they finish SSO sign-in, `acceptPendingInviteOnAuth` will still accept the invite and automatically place them on the waitlist via `waitlistOnInviteAccept`. We should make sure the post-login UI clearly states whether they got a confirmed seat or landed #1 on the waitlist, and prune abandoned `PendingAcceptances` if the SSO flow is never completed.
 
 ---
 
@@ -877,39 +862,46 @@ then Inviting.accept (event: target, guest: actor)
 ```
 **Note:** When an already-authenticated user follows a shared `token` and clicks accept, this reaction checks that the gathering is open and matches any `scope` requirement before recording `Inviting.accept`.
 
-#### 4. `acceptByLinkPendingAuth` & `completePendingInviteOnVerify` (Unauthenticated Guest Flow)
+#### 4. `acceptByLinkPendingAuth` & `acceptPendingInviteOnAuth` (Unauthenticated Guest SSO Flow)
 ```
 reaction acceptByLinkPendingAuth
-when Requesting.acceptByLinkWithEmail (email, token, now)
+when Requesting.acceptByLinkPendingAuth (token, pendingKey, now)
 where Linking: _resolve(token, now) returns (target, link)
-  and Hosting: target is gathering with status OPEN or CONFIRMED
+  and Hosting: target is a gathering with status OPEN or CONFIRMED
   and Reserving: pool for target is not locked
 then
-  Inviting.deferAccept (event: target, contact: email)
-  Authenticating.requestCode (email, now)
+  Inviting.deferAccept (event: target, pendingKey)
 
-reaction acceptPendingInviteOnVerify
-when Authenticating.verifyCode (email) : returns (user)
-where Inviting: event is in _getPendingForContact(contact: email)
+reaction authenticateFromSso
+when Requesting.completeSsoLogin (externalId, email)
+then Authenticating.authenticate (externalId, email)
+
+reaction acceptPendingInviteOnAuth
+when
+  Requesting.completeSsoLogin (pendingKey)
+  Authenticating.authenticate () : returns (user)
+where Inviting: event is in _getPendingForKey(pendingKey)
   and Hosting: event is a gathering with status OPEN or CONFIRMED
   and Reserving: pool for event is not locked
   and (Hosting: event's scope is absent or Authenticating: _hasDomain(user, event's scope) is true)
 then
-  Inviting.clearPending (event, contact: email)
+  Inviting.clearPending (event, pendingKey)
   Inviting.accept (event, guest: user)
 
-reaction clearIneligiblePendingOnVerify
-when Authenticating.verifyCode (email) : returns (user)
-where Inviting: event is in _getPendingForContact(contact: email)
+reaction clearIneligiblePendingOnAuth
+when
+  Requesting.completeSsoLogin (pendingKey)
+  Authenticating.authenticate () : returns (user)
+where Inviting: event is in _getPendingForKey(pendingKey)
   and (
     Hosting: event's status is not OPEN and not CONFIRMED
     or Reserving: pool for event is locked
     or (Hosting: event's scope is present and Authenticating: _hasDomain(user, event's scope) is false)
   )
 then
-  Inviting.clearPending (event, contact: email)
+  Inviting.clearPending (event, pendingKey)
 ```
-**Note:** Realizes the two-step pre-authentication acceptance flow. Whether the person has never created an account or is returning on an unauthenticated browser, clicking accept with their email records a pending acceptance in `Inviting` and triggers `Authenticating.requestCode`. As soon as `Authenticating.verifyCode` succeeds, `acceptPendingInviteOnVerify` automatically clears the pending tracker and fires `Inviting.accept` (which triggers seat reservation below); if the gathering closed or their email domain did not match `scope`, `clearIneligiblePendingOnVerify` discards the stale pending entry without calling `accept`. *(Open issue: `requestCode` fires here even if `email` does not match `gathering.scope`; before Beta we can optionally check domain format early at `acceptByLinkWithEmail` for better UX.)*
+**Note:** Realizes the two-step pre-authentication acceptance flow over external SSO (MIT Touchstone or Commons login, TBD; no email/OTP verification). Clicking accept while signed out stores `(event, pendingKey)` in `Inviting` before redirecting to the SSO provider; once the callback completes `Authenticating.authenticate`, `acceptPendingInviteOnAuth` automatically clears the pending tracker and fires `Inviting.accept` (triggering seat reservation below), while `clearIneligiblePendingOnAuth` discards stale entries if the table closed or the domain `scope` did not match. *(Open issue: confirming how `pendingKey` is preserved cleanly across the Touchstone or Commons redirect callback.)*
 
 #### 5. `reserveOrWaitlistOnAccept` & `releaseOnWithdraw`
 ```

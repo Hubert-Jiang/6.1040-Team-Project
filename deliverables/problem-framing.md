@@ -107,57 +107,55 @@ Our solution is a **link-first shared meal organizer** built for trusted communi
    - **Host selects a restaurant (no poll):** When a host already has a restaurant or dining hall in mind (as in Alice's tapas outing or Maya's floor dinner), no poll is created—guests simply claim an open seat.
    - **Host leaves the restaurant unselected (invitees vote):** When an organizer has a time window but wants the group to choose together without hitting acquaintance deadlock (as in Noah's break dinner), the host sets a time, seat cap, and optional initial restaurant suggestions without picking a final venue. Users can save a lightweight **dining preference profile** (dietary restrictions, budget preference, cuisine tastes, and walking preference) so participants at the table can see each other's constraints without putting anyone on the spot, and committed invitees propose and vote on options before the cutoff to lock in one restaurant. Importantly, we avoid personality or social compatibility matching as well as automated restaurant recommendations; profiles exist purely to inform human venue choices.
 
-3. **Verified community access without manual approval (addresses BS1 and BS2):** The host selects one or more communities that can join (for example, anyone with an `@mit.edu` or company email, or a specific dorm or group, so that one table can be open to both a dorm and a second community at once). Even if the link is forwarded, claiming a seat requires verifying membership in that community. Within those bounds, eligible peers claim an open spot directly without waiting for host approval, avoiding both host bottlenecking and the social discomfort of asking to be accepted.
+3. **Verified community access without manual approval (addresses BS1 and BS2):** The host drops Zoom-like shareable links into trusted channels (dorm lists, cultural clubs, lab Slacks) and can scope seat claims to a verified institutional domain (initially MIT). For scoping purposes, custom email/OTP verification will not be implemented; instead, authentication will use either MIT Touchstone or Commons login (TBD). Even if a link is forwarded, claiming a seat requires authenticating within that scope, and eligible peers reserve directly without waiting for host approval—avoiding both host bottlenecking and the social discomfort of asking to be accepted.
 
 4. **Live seat tracking, cutoffs, and automatic reopening (addresses BS2 and BS3):** Because every guest holds an explicit seat rather than a soft *"maybe"*, the host gets an exact headcount by the booking deadline. Holding a seat triggers a timely reminder ahead of the cutoff; if a diner's plans change and they release their spot before then, the seat automatically becomes open again on the exact same link and notifies anyone on a waitlist. A host with a fixed venue can place the actual reservation (for example, on OpenTable or by phone) and mark the table booked right away or once the headcount settles, while a host whose group is voting books once the restaurant and headcount lock in at the cutoff.
 
-5. **Community table board alongside shareable links (addresses BS1):** Inside each verified community, an optional day-by-day list displays open tables with remaining seats - answering the basic question *"what meals have room tonight?"* without requiring a hesitant newcomer to post into a silent hundred-person channel first.
-
-**Scope and realistic limits:** The system cannot force someone to show up after a booking deadline passes, nor can it guarantee that a meal turns into a close friendship. It does, however, remove the friction between *"anyone free?"* and a confirmed reservation: dead spreadsheet rows and dropped seats reopen automatically, acquaintances align on compatible restaurants without awkward negotiation, and people who prefer eating alone never have to interact with the tool. We plan to pilot first within MIT communities (across both ordinary weeks and academic breaks) before expanding to other campuses and workplaces.
+**Scope and realistic limits:** The system cannot force someone to show up after a booking deadline passes, nor can it guarantee that a meal turns into a close friendship. It does, however, remove the friction between *"anyone free?"* and a confirmed reservation: dead spreadsheet rows and dropped seats reopen automatically, acquaintances surface dining constraints without awkward negotiation, and people who prefer eating alone never have to interact with the tool. For the current F3 scope, we stick strictly to the Zoom-link model for restaurant and dining-hall meals—deferring public in-app table boards/feeds, home potlucks, game nights, and email/OTP verification—and plan to pilot first within the MIT community before considering broader expansion.
 
 ## Ethical analysis
 
-The analysis below uses the four lecture dimensions required by F2. Each entry names its dimension, describes the naive implementation (what a first version of the feature would do) and the harm that follows from it, and then gives the design response we chose and the risk that remains. Multi-lifespan cards are outside the scope of this assignment. In this section, a *table page* is the shareable page for one gathering, and the *table board* is the day-by-day list of open tables inside a community.
+The analysis below uses the four lecture dimensions required by F2. Each entry names its dimension, describes the naive implementation (what a first version of the feature would do) and the harm that follows from it, and then gives the design response we chose and the risk that remains. Multi-lifespan cards are outside the scope of this assignment. In this section, a *table page* is the shareable page for one gathering. *(F3 scope note: potlucks, game nights, private-home gatherings, and a public in-app table board are deferred out of the current implementation scope; the domain risks below remain documented for the broader problem space and to guide any future re-introduction of those features.)*
 
 ### 1. Indirect stakeholders: home addresses
 - **Naive implementation:** The table page shows the street address so that guests know where to go.
 - **Harm:** A potluck at a professor's apartment also involves roommates and neighbors, who have no account and no way to opt out, and the address then follows every forward of the link.
-- **Design response:** The table page only shows a general area, and the full address is visible only to the host and to whoever currently holds a place. Dining halls and lounges can still be listed in full.
-- **Remaining risk:** A guest who has seen the address can still pass it on later.
+- **Design response:** In the broader design, the table page only shows a general area and restricts the full address to the host and current seat-holders. In our current F3 scope, private-home potlucks are deferred entirely so gatherings take place at public restaurants and campus dining halls with no residential addresses stored.
+- **Remaining risk:** If home gatherings are re-introduced later, a guest who has seen the address can still pass it on.
 
 ### 2. Values: community and dignity in who gets a place
 - **Naive implementation:** The host approves each guest, or guests fill out profiles that the host browses before deciding.
 - **Harm:** Approval protects an evening, but it makes a spare seat depend on whether a stranger seems pleasant, and profiles sort people before they meet.
-- **Design response:** The host sets the community, the capacity, and terms such as food or a contribution, and anyone inside those terms can claim an open place without being ranked. Dining preferences are only used to narrow down where the group can eat.
+- **Design response:** The host sets the scope and capacity, and any verified peer inside that scope can accept and reserve an open place without being ranked. Dining profiles hold only food/budget/distance preferences and are withheld from unreserved link viewers.
 - **Remaining risk:** Hosts can no longer turn a particular person away. Guests and reluctant hosts both avoid that rejection, but a host also cannot screen guests for an evening they want to keep small.
 
 ### 3. Time: non-use and the invitation link
 - **Naive implementation:** Gatherings exist only inside the app.
 - **Harm:** Students who never install the app miss open places the same way they missed the Maseeh email.
-- **Design response:** Each table page has a link that the host can send in the old chat or mailing list, while claiming a seat still checks membership in the selected community. Reminders only go to people holding a place, which means that students who want a quiet break are never prompted to attend.
-- **Remaining risk:** A table that nobody shares only reaches the members who open the table board.
+- **Design response:** Each table has a shareable link that the host sends in existing chats or mailing lists, viewable without signing in, while claiming a seat authenticates via Touchstone or Commons login (TBD). Reminders only go to people holding a place, and uninterested peers ignore the link without creating an account or clicking decline.
+- **Remaining risk:** A link that a host never shares into any channel will not reach potential guests.
 
 ### 4. Pervasiveness: what "bring something" comes to mean
 - **Naive implementation:** Table pages prompt guests to bring food by default.
 - **Harm:** If most tables ask for food, students who stayed on campus because travel was already expensive are shut out, and an optional dish starts to sound required.
-- **Design response:** By default nothing is required, and a host has to mark a contribution as optional or expected. A dietary or religious note on the same page helps both a guest who cannot eat the meal and a host who would otherwise have to guess.
-- **Remaining risk:** A host can still mark a contribution as expected, so the default only protects tables where the host leaves it alone.
+- **Design response:** In the broader design, nothing is required by default and hosts must explicitly mark contributions. In our current F3 scope, potlucks and dish contributions are deferred out of scope altogether.
+- **Remaining risk:** If potlucks are re-introduced later and a host marks a contribution as expected, the default only protects tables where the host leaves it alone.
 
 ### 5. Values: community and safety at private homes
 - **Naive implementation:** An open table board shows every gathering to everyone.
-- **Harm:** The board would show Noah more gatherings, but it would also let someone outside the community claim a place at an apartment, and some first-years are under 18.
-- **Design response:** Claims stay inside the community the host selects, and a home address stays off the table page. We still allow home gatherings, because hosts already invite people to them over email, where the address circulates with no check at all.
-- **Remaining risk:** Shared affiliation is not the same as safety, so membership is a weak safeguard and should not be presented as more than that.
+- **Harm:** An open board would expose gatherings to strangers outside the community and risk letting unvetted visitors claim a place at a private apartment where first-years may live.
+- **Design response:** In the current F3 scope, both public boards and private-home gatherings are deferred: tables are shared strictly via links inside trusted channels and optionally gated by institutional email domain.
+- **Remaining risk:** Shared institutional affiliation is not the same as safety, so domain membership is a weak safeguard and should not be presented as more than that.
 
 ### 6. Time: reappropriation, once a place means something else
 - **Naive implementation:** The app supports any kind of event, with a follower list for popular hosts.
-- **Harm:** If open places get used for dates or large parties, a student looking for a small meal can no longer trust the table board.
-- **Design response:** Table types stay limited to meals, potlucks, and game nights, and each table closes when its window ends. There is no follower list, and a released place returns as a seat on the same link.
-- **Remaining risk:** Some misuse will remain, since the board can only show that a gathering has room and cannot tell a guest what the gathering will be like.
+- **Harm:** If open places get used for dates or large parties, peers looking for a small casual meal lose trust in the tool.
+- **Design response:** Gatherings stay scoped strictly to informal meals (even potlucks and game nights are deferred for now), each gathering closes when its window ends, there is no public feed or follower list, and a released place returns as a seat on the same link.
+- **Remaining risk:** Some misuse remains possible when links are shared broadly, since a link only shows open seats and cannot guarantee the social tone of a gathering.
 
 ### 7. Direct stakeholders: fake, abandoned, and spam tables
 - **Naive implementation:** Anyone can post any number of tables, and a table stays listed until someone closes it.
-- **Harm:** Guests may show up to a table that does not exist, while spam fills the board and wastes the attention of bystanders, who are already the group most exposed to noise.
-- **Design response:** Only verified community members can create tables, so every post is tied to an institutional identity. The host also has to confirm the table before its cutoff, and a table that is not confirmed closes and drops off the board. Each host can only have a limited number of tables open at once, and attendees can report a table, which sends it to a short review queue.
-- **Remaining risk:** A verified member can still post one false table before anyone notices, and the review queue depends on people we may not have by the beta. As a result, the development plan treats the report queue as optional and builds host confirmation and the per-host limit first.
+- **Harm:** Guests may show up to a table that does not exist, while spam fills channels and wastes the attention of bystanders.
+- **Design response:** Only authenticated institutional users can create tables, so every table is tied to a real identity. Hosts must confirm the table before its cutoff or it closes automatically, each host is capped on active open tables at once, and leaked links can be revoked independently. Deferring public boards also removes any global spam feed.
+- **Remaining risk:** A verified user can still create a false table before anyone notices, and a formal attendee report/review queue remains optional for Beta.
 
