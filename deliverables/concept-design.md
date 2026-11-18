@@ -4,7 +4,7 @@
 
 Our app helps acquaintances within trusted communities move from *"anyone free?"* to a confirmed informal meal using a **Zoom-link sharing model**: a host creates a meal gathering, receives one or more unguessable shareable links (not tied to any recipient's identity), and drops them into existing group chats, mailing lists, or Slacks. When an unauthenticated peer follows a link and clicks accept, their pending acceptance is tracked across institutional SSO login (MIT Touchstone or Commons login, TBD) and automatically completes once authenticated. The design decomposes the application into eight focused, single-purpose concepts:
 
-1. **`Authenticating`** authenticates users via an external institutional identity provider (MIT Touchstone or Commons login, TBD) and records each user's verified email and domain. For scoping purposes, custom email/OTP verification will not be implemented. It gates gathering creation and—when a gathering specifies a community scope—checks domain membership without social profiles or follower lists.
+1. **`Authenticating`** authenticates users via an external institutional identity provider (MIT Touchstone or Commons login, TBD) and records each user's verified email and domain. For scoping purposes, custom email/OTP verification will not be implemented. It gates gathering creation and, when a gathering specifies a community scope, checks domain membership without social profiles or follower lists.
 2. **`Hosting`** manages the meal-gathering lifecycle (`OPEN`, `CONFIRMED`, `BOOKED`, `CLOSED`, `CANCELLED`), basic event metadata (`title`, time window, `area`, optional `details` and `confirmedVenue`), and per-host active-table limits. It stores no capacities, polls, link tokens, or user dietary/budget constraints.
 3. **`Linking`** issues, resolves, and revokes shareable link tokens for generic target resources. Links belong to the target (not to individual guests), so a single link dropped in a group chat can be resolved by many peers, while separate links for different channels can be revoked independently.
 4. **`Inviting`** records guest acceptances to an event (with clean withdrawal for guests whose plans change) and tracks pending acceptances (`PendingAcceptances`) keyed by a login-intent token while an unauthenticated prospective guest signs in via SSO, automatically accepting the invite once authenticated. Uninterested peers simply ignore the shared link without needing an account or a declined cookie.
@@ -21,7 +21,7 @@ A host chooses the venue in one of two ways when creating a gathering. A host wh
 
 We considered a standalone `Authorizing` concept for per-resource access control lists, but omitted it as unnecessary complexity under the Zoom-link model:
 - **Viewing gathering details** uses `Linking`: anyone with an active shared link token can view a gathering's details (`area`, `confirmedVenue`, time window, terms, live open spots) without identity-bound tokens.
-- **Accepting an invite, reserving a seat, or voting** requires authentication (`Authenticating`) and—if the gathering specifies a `scope`—matching the verified email domain, rather than maintaining a per-person ACL; option proposals, votes, and tablemate profile views are further restricted in reactions to the gathering's `host` (`Hosting`) and active reservation holders (`Reserving`).
+- **Accepting an invite, reserving a seat, or voting** requires authentication (`Authenticating`) and, if the gathering specifies a `scope`, matching the verified email domain, rather than maintaining a per-person ACL; option proposals, votes, and tablemate profile views are further restricted in reactions to the gathering's `host` (`Hosting`) and active reservation holders (`Reserving`).
 
 ### Generic Type Instantiations
 
@@ -84,8 +84,8 @@ _hasDomain(user: User, domain: String) : one (matches: Flag)
 ```
 
 #### Note
-- **Scoping decision — no email/OTP verification:** For scoping purposes, custom email/OTP verification will not be implemented. Instead, authentication will use either **MIT Touchstone** or **Commons login (TBD)**, which handles identity and MIT affiliation verification externally and supplies `(externalId, email)` on callback.
-- **Minimal user identity:** `Users` stores only `externalId`, `email`, and `domain`—no passwords, bios, avatars, or follower lists (Ethical Analysis #2, #6). HTTP session cookies belong to the web request boundary rather than `Authenticating`.
+- **Scoping decision - no email/OTP verification:** For scoping purposes, custom email/OTP verification will not be implemented. Instead, authentication will use either **MIT Touchstone** or **Commons login (TBD)**, which handles identity and MIT affiliation verification externally and supplies `(externalId, email)` on callback.
+- **Minimal user identity:** `Users` stores only `externalId`, `email`, and `domain` (no passwords, bios, avatars, or follower lists, preserving Ethical Analysis #2 and #6). HTTP session cookies belong to the web request boundary rather than `Authenticating`.
 - **Open issue to resolve:** Finalizing between MIT Touchstone and Commons login (and confirming what `externalId` / `email` attributes the chosen provider exposes). Narrower group scoping (e.g., a single dorm floor or cultural club) currently relies on sharing a `Linking` link inside that group's chat or mailing list; if explicit roster checks are later needed, an `Authorizing` concept can be added cleanly without modifying `Authenticating`.
 
 ---
@@ -303,7 +303,7 @@ _listForTarget(target: Target) : many (link: Link, token: String, label: String 
 
 ### 4. Inviting
 
-**Purpose:** Record guest acceptances to an event—including tracking pending acceptances across an unauthenticated guest's SSO sign-in—so guests can accept seamlessly from a shared link before or after authenticating, without forcing uninterested peers to sign in just to say no.
+**Purpose:** Record guest acceptances to an event (including tracking pending acceptances across an unauthenticated guest's SSO sign-in) so guests can accept seamlessly from a shared link before or after authenticating, without forcing uninterested peers to sign in just to say no.
 
 **Principle:** An authenticated guest accepts an event directly (and may withdraw later if plans change). When an unauthenticated person clicks accept, a pending acceptance is recorded against an opaque login-intent key; once they complete external SSO authentication, the pending acceptance automatically completes as an accepted invitation.
 
@@ -589,9 +589,9 @@ _getProfiles(users: set of Users) : many (
 ```
 
 #### Note
-- **Qualitative human judgment instead of deterministic restriction:** Earlier drafts computed a deterministic "most restrictive" minimum budget and walk time across the group. That can falsely rule out options—a student who normally prefers `BUDGET` may happily stretch to `MODERATE` for a holiday dinner. Returning participants' dining profiles via `_getProfiles` lets the host and guests weigh preferences qualitatively (e.g., noticing one halal requirement and a general preference for inexpensive nearby spots) without building any matching or recommendation engine.
-- **Privacy boundary (tablemate-scoped vs. public vs. anonymized):** Making profiles fully public to anyone holding a forwarded Zoom link would expose personal dietary, religious, and budget information to casual bystanders; therefore, the `viewTableProfiles` reaction restricts `_getProfiles` to the gathering's host and active reservation holders.
-- **Open issue to resolve:** Even within a table, showing named profiles vs. hiding `user` identities (so shy peers like Noah do not feel singled out for a restriction or lower budget) is a clear UX tradeoff. During F6 user testing we will test whether tablemate-scoped profiles should display names (helpful for allergy follow-up) or omit names at the UI layer.
+- **Qualitative human judgment instead of deterministic restriction:** Earlier drafts computed a deterministic "most restrictive" minimum budget and walk time across the group. That can falsely rule out options: a student who normally prefers `BUDGET` may happily stretch to `MODERATE` for a holiday dinner. Returning participants' dining profiles via `_getProfiles` lets the host and guests weigh preferences qualitatively (e.g., noticing one halal requirement and a general preference for inexpensive nearby spots) without building any matching or recommendation engine.
+- **Semi-private profile visibility:** We chose a semi-private model: profiles are not public to arbitrary users or unreserved link viewers (protecting personal dietary, religious, and budget details from casual bystanders), **but** once participants are added to the same table (as the host or an active reservation holder), `viewTableProfiles` lets them view each other's profiles.
+- **Open issue to resolve:** Within a table's semi-private view, we will verify in F6 user testing whether `notes` should appear alongside dietary/budget fields or remain host-only if guests write identifying details.
 
 ---
 
@@ -731,7 +731,7 @@ _getVoterChoices(poll: Poll, voter: Voter) : many (option: Option)
 
 **Purpose:** Deliver timely event updates and scheduled pre-cutoff reminders strictly to participating recipients, cancelling pending reminders if plans change so bystanders and former participants are never spammed.
 
-**Principle:** When an event happens, a notification is sent immediately to the relevant recipient. When a future reminder is scheduled for a recipient and subject, it is delivered once its target time arrives—unless cancelled earlier because the recipient withdrew or the subject closed.
+**Principle:** When an event happens, a notification is sent immediately to the relevant recipient. When a future reminder is scheduled for a recipient and subject, it is delivered once its target time arrives, unless cancelled earlier because the recipient withdrew or the subject closed.
 
 #### Types
 ```types
@@ -837,7 +837,7 @@ when
 then
   Linking.createLink (target: gathering, creator: actor, label: linkLabel, expiresAt: undefined, now)
 ```
-**Note:** Requires the host to be authenticated (`Authenticating`) and—if they set an institutional `scope` like `"mit.edu"`—verified in that domain themselves (Ethical Analysis #7). Upon creation, `Linking` issues the first shareable link for the host to drop into a chat or email; additional links can be created or revoked via `Linking.createLink` / `Linking.revokeLink`.
+**Note:** Requires the host to be authenticated (`Authenticating`) and, if they set an institutional `scope` like `"mit.edu"`, verified in that domain themselves (Ethical Analysis #7). Upon creation, `Linking` issues the first shareable link for the host to drop into a chat or email; additional links can be created or revoked via `Linking.createLink` / `Linking.revokeLink`.
 
 #### 2. `viewByLink`
 ```
@@ -1059,7 +1059,7 @@ then
     now
   )
 ```
-**Note:** Locks reservations, cancels any open poll, cancels pending pre-cutoff reminders, and notifies currently reserved guests—keeping fixed-venue gatherings completely independent of `Polling`.
+**Note:** Locks reservations, cancels any open poll, cancels pending pre-cutoff reminders, and notifies currently reserved guests, keeping fixed-venue gatherings completely independent of `Polling`.
 
 ---
 
@@ -1121,7 +1121,7 @@ then
     sendAt: cutoffTime - 2 hours
   )
 ```
-**Note:** Directly solves Bad Situations 2 and 3. When a reservation is cancelled while unlocked, either the spot immediately reopens on existing `Linking` links (if the waitlist is empty) or the next waitlisted peer is promoted, notified, and scheduled for a cutoff reminder—without noisy channel re-blasts.
+**Note:** Directly solves Bad Situations 2 and 3. When a reservation is cancelled while unlocked, either the spot immediately reopens on existing `Linking` links (if the waitlist is empty) or the next waitlisted peer is promoted, notified, and scheduled for a cutoff reminder, without noisy channel re-blasts.
 
 ---
 
@@ -1136,4 +1136,4 @@ where (Hosting: actor is host of gathering or Reserving: _hasReservation(resourc
   and Reserving: reserved is _getReservedUsers(gathering)
 then Profiling._getProfiles (users: {host} union reserved)
 ```
-**Note:** Connects `Profiling` to `Hosting` and `Reserving` so the host and reserved guests can review tablemates' dining preferences qualitatively when proposing and voting on restaurants, while withholding profiles from unreserved link viewers. Whether the UI displays names alongside these profiles or omits names to protect shy participants remains an explicit decision to evaluate in user testing.
+**Note:** Implements semi-private profile visibility: arbitrary users and unreserved link viewers cannot access anyone's profile, while participants added to the same table (the host and active reservation holders) can view each other's dining profiles via `_getProfiles` to inform restaurant choices qualitatively.
