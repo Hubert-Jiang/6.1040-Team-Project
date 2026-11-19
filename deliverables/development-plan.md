@@ -17,7 +17,8 @@ Thanksgiving falls on Nov 26, between the Alpha and Beta deadlines, and we will 
 | Member | Primary ownership | Also responsible for |
 |---|---|---|
 | Hubert | Authenticating, Polling, and Notifying | Note-taking during meetings. Ensuring sessions are secure and that authentication is properly integrated with the rest of the app. |
-| Elijah | Inviting, Reserving, Profiling, Hosting, and Linking | Ensuring locking interactions for reserving; i.e. users reserving a seat hold a lock while the reaction completes |
+| Elijah | Reserving and Hosting | Ensuring locking interactions for reserving; i.e. users reserving a seat hold a lock while the reaction completes |
+| Diego | Profiling, Inviting, and Linking | |
 
 Everyone implements the syncs and reactions that touch their own concepts. Each task can be committed and merged as necessary. Teammates will communicate with each other to reduce the prevalence of merge conflicts. Each teammate will review the others' pushes regularly to ensure quality and clear up any confusion. Text updates will be sent to the group chat when pushes are completed.
 
