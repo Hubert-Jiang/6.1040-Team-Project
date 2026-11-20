@@ -1,5 +1,7 @@
 # User Journey
 
+[← Back to README](../README.md)
+
 This journey follows Noah, the international student from Bad Situation 1, through Thanksgiving week as he hosts a dinner with our app instead of eating alone. Noah is the host, so his guests appear only through what he sees on his table page.
 
 **The trigger.** On the Monday before Thanksgiving, Noah's friends leave for the airport and the dining hall posts reduced holiday hours. Flying home to Singapore for four days is far too expensive, and he would rather share a Thanksgiving dinner than eat alone. The last time he tried, his post in the dorm list drew five replies of "maybe, depends where and how much," and the search for a restaurant that suited strangers' diets and budgets dragged on until everyone drifted off.

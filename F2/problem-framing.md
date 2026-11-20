@@ -1,5 +1,7 @@
 # Problem framing
 
+[← Back to README](../README.md)
+
 
 ## Domain
 Our problem domain is shared informal meals within trusted communities - such as university campuses and workplaces - that extend beyond a person's immediate circle of close friends. Sharing a meal is one of the easiest ways to explore new local restaurants, unwind after classes or work, or celebrate holidays away from family. On campuses, people also occasionally gather at dining halls for quick weeknight meals or subsidized group dinners. While people sometimes choose to eat alone for quiet downtime, there are frequent occasions when someone wants company at a table but their close friends are busy or out of town.

@@ -1,10 +1,12 @@
 # Design Summary
 
-This document summarizes the overall design specified in [concept-design.md](concept-design.md) against the domain, bad situations, and ethical analysis in [problem-framing.md](problem-framing.md).
+[← Back to README](../README.md)
+
+This document summarizes the overall design specified in [concept-design.md](concept-design.md) against the domain, bad situations, and ethical analysis in [problem-framing.md](../F2/problem-framing.md).
 
 ## How the Concepts Work Together to Solve the Problem
 
-Our design addresses the three recurring failures in [problem-framing.md](problem-framing.md) (shy break-staying peers stalling over unfamiliar diets and budgets in BS1, weeknight hosts trapped by soft *"maybe"* replies and buried links in BS2, and advisor/GRA spreadsheets going stale when someone drops out in BS3) through eight independent concepts coordinated by reactions:
+Our design addresses the three recurring failures in [problem-framing.md](../F2/problem-framing.md) (shy break-staying peers stalling over unfamiliar diets and budgets in BS1, weeknight hosts trapped by soft *"maybe"* replies and buried links in BS2, and advisor/GRA spreadsheets going stale when someone drops out in BS3) through eight independent concepts coordinated by reactions:
 
 1. **Pure Zoom-link distribution (`Hosting` + `Linking` + `Authenticating`):**
    Hosts authenticate via an external institutional SSO provider, either **MIT Touchstone** or **Commons login (TBD)** (for scoping purposes, email/OTP verification will not be implemented). They then create a meal gathering in `Hosting` with a time window, RSVP cutoff, general area, and either a chosen restaurant (`confirmedVenue`) or no restaurant yet. Rather than building an in-app public feed or forcing peers off existing chats, `Linking` issues unguessable shareable link tokens (`token -> Gathering`) that are not bound to any recipient's identity, so a host drops one link into a dorm list, Slack, or group chat for multiple acquaintances to open (`viewByLink`), or issues separate labeled links per channel. Staying purely link-driven (deferring public boards/feeds for now) preserves host privacy, reduces flake and no-show risk since guests come from existing acquaintance channels rather than cold stranger browsing, and avoids the moderation overhead of a public discovery surface.
@@ -25,7 +27,7 @@ Our design addresses the three recurring failures in [problem-framing.md](proble
 
 ## How the Design Addresses Ethical Concerns
 
-The table below traces each concern from the ethical analysis in [problem-framing.md](problem-framing.md#L118-L162) to the current design in [concept-design.md](concept-design.md):
+The table below traces each concern from the ethical analysis in [problem-framing.md](../F2/problem-framing.md#L120-L164) to the current design in [concept-design.md](concept-design.md):
 
 | Ethical Analysis Concern | How the Design Addresses It |
 |---|---|

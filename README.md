@@ -1,9 +1,15 @@
-# 6.1040 Team Project repo
+# 6.1040 Team Project
 
-## Deliverables
-F2: [Problem Framing](deliverables/problem-framing.md) \
-F3: [User Journey](deliverables/user-journey.md) \
-F3: [Concept Design](deliverables/concept-design.md) \
-F3: [Design Summary](deliverables/design-summary.md) \
-F3: [Visual Design Study](deliverables/visual-design-study.md) \
-F3: [Development Plan](deliverables/development-plan.md)
+- [Our Team](team.md)
+
+## F2
+
+- [Problem Framing](F2/problem-framing.md)
+
+## F3
+
+- [User Journey](F3/user-journey.md)
+- [Concept Design](F3/concept-design.md)
+- [Design Summary](F3/design-summary.md)
+- [Visual Design Study](F3/visual-design-study/visual-design-study.md) ([slides](F3/visual-design-study/visual-design-study.pptx), [PDF](F3/visual-design-study/visual-design-study.pdf))
+- [Development Plan](F3/development-plan.md)

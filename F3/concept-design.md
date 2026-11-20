@@ -1,5 +1,7 @@
 # Concept Design
 
+[← Back to README](../README.md)
+
 ## Overview: Role of Concepts and Type Instantiation
 
 Our app helps acquaintances within trusted communities move from *"anyone free?"* to a confirmed informal meal using a **Zoom-link sharing model**: a host creates a meal gathering, receives one or more unguessable shareable links (not tied to any recipient's identity), and drops them into existing group chats, mailing lists, or Slacks. When an unauthenticated peer follows a link and clicks accept, their pending acceptance is tracked across institutional SSO login (MIT Touchstone or Commons login, TBD) and automatically completes once authenticated. The design decomposes the application into eight focused, single-purpose concepts:
