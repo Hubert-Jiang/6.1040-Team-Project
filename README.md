@@ -1,7 +1,4 @@
 # 6.1040 Team Project
-
-- [Our Team](team.md)
-
 ## F2
 
 - [Problem Framing](F2/problem-framing.md)
