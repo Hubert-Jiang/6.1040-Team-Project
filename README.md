@@ -16,14 +16,16 @@ bun test
 bun run check && bun run check:design
 ```
 
+```bash
+bun run build:web && bun run start
+```
+
 The venue lookup reads `GOOGLE_PLACES_API_KEY` from `.env` (see `.env.example`) and returns no venues without it.
 
 ## F2
-
 - [Problem Framing](F2/problem-framing.md)
 
 ## F3
-
 - [User Journey](F3/user-journey.md)
 - [Concept Design](F3/concept-design.md)
 - [Design Summary](F3/design-summary.md)

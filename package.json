@@ -4,19 +4,29 @@
   "type": "module",
   "packageManager": "bun@1.4.2",
   "dependencies": {
-    "@mit-sdg/sync-engine": "1.1.0",
-    "mongodb": "^7.7.0"
+    "@mit-sdg/sync-engine": "1.2.0",
+    "@mit-sdg/sync-engine-http": "1.2.0",
+    "mongodb": "^7.7.0",
+    "vue": "^3.5.46",
+    "vue-router": "^5.5.1"
   },
   "devDependencies": {
+    "@mit-sdg/sync-engine-analysis": "1.2.0",
+    "@mit-sdg/sync-engine-catalog": "1.2.0",
     "@types/bun": "^1.4.0",
     "@types/node": "^24.0.0",
+    "@vitejs/plugin-vue": "^6.0.11",
     "mongodb-memory-server": "11.2.0",
-    "typescript": ">=6 <7"
+    "typescript": ">=6 <7",
+    "vite": "^8.3.8"
   },
   "scripts": {
     "check": "tsc --noEmit",
-    "check:design": "sync-engine check-design design/concepts/*.md",
-    "test": "bun test"
+    "check:design": "sync-engine check-design design/types.md design/concepts/*.md design/compositions/*.md",
+    "test": "bun test",
+    "generate": "sync-engine artifacts pin",
+    "build:web": "vite build",
+    "start": "bun src/main.ts"
   },
   "overrides": {
     "bson": "7.2.0"
