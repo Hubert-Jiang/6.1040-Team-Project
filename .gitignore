@@ -1,0 +1,10 @@
+node_modules/
+*.tsbuildinfo
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+
+# sync-engine run logs, kept locally
+.sync-engine/

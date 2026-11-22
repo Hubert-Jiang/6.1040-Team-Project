@@ -1,0 +1,24 @@
+{
+  "name": "6.1040-team-project",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.4.2",
+  "dependencies": {
+    "@mit-sdg/sync-engine": "1.1.0",
+    "mongodb": "^7.7.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.0",
+    "@types/node": "^24.0.0",
+    "mongodb-memory-server": "11.2.0",
+    "typescript": ">=6 <7"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "check:design": "sync-engine check-design design/concepts/*.md",
+    "test": "bun test"
+  },
+  "overrides": {
+    "bson": "7.2.0"
+  }
+}
