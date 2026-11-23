@@ -61,6 +61,7 @@ Defined in [Hosting](../design/concepts/Hosting.md), line 1.
 - `_getDetails(gathering: Gathering) : optional (host: Host, title: String, status: GatheringStatus, startTime: DateTime, endTime: DateTime, cutoffTime: DateTime, details?: String, scope?: String, area: String, confirmedVenue?: String)`
 - `_getHosted(host: Host) : many (gathering: Gathering, title: String, status: GatheringStatus, startTime: DateTime)`
 - `_getPastCutoff(now: DateTime) : many (gathering: Gathering, status: GatheringStatus)`
+- `_getEnded(now: DateTime) : many (gathering: Gathering)`
 
 #### Instances
 
@@ -134,7 +135,7 @@ Defined in [Sessioning](../design/concepts/Sessioning.md), line 1.
 - `hasSession(session?: String) : Flag` — [Auth](../design/compositions/Auth.md), line 33.
 - `normalizeReturnTo(raw?: String) : String` — [Auth](../design/compositions/Auth.md), line 36.
 - `now() : DateTime` — [Auth](../design/compositions/Auth.md), line 27.
-- `parseTime(raw: String) : DateTime` — [Gatherings](../design/compositions/Gatherings.md), line 29.
+- `parseTime(raw: String) : DateTime` — [Gatherings](../design/compositions/Gatherings.md), line 33.
 - `sessionLifetimeMs() : Number` — [Auth](../design/compositions/Auth.md), line 30.
 - `testAccountAffiliation() : String` — [Auth](../design/compositions/Auth.md), line 54.
 - `testAccountEmail() : String` — [Auth](../design/compositions/Auth.md), line 48.
@@ -461,7 +462,7 @@ then
 
 Authored path: `Gatherings.Creating.Create`.
 - Covered by [Gatherings](../design/compositions/Gatherings.md), line 5.
-- Covered by [Gatherings](../design/compositions/Gatherings.md), line 20.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 24.
 
 ```reaction
 when RequestBoundary.request (area, capacity, confirmedVenue, cutoffTime, details, endTime, path: "/gatherings/create", requestId, session, startTime, title)
@@ -478,7 +479,7 @@ then
 
 Authored path: `Gatherings.Creating.Create`.
 - Covered by [Gatherings](../design/compositions/Gatherings.md), line 5.
-- Covered by [Gatherings](../design/compositions/Gatherings.md), line 20.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 24.
 
 ```reaction
 when Sessioning.current (now, session, subject: user), asked by Gatherings.Creating.Create
@@ -495,7 +496,7 @@ then
 
 Authored path: `Gatherings.Creating.Create`.
 - Covered by [Gatherings](../design/compositions/Gatherings.md), line 5.
-- Covered by [Gatherings](../design/compositions/Gatherings.md), line 20.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 24.
 
 ```reaction
 when Hosting.create (area, confirmedVenue, cutoffTime: cutoff, details, endTime: end, host: user, now, startTime: start, title, gathering), asked by Gatherings.Creating.Create#2
@@ -509,7 +510,7 @@ then
 
 Authored path: `Gatherings.Creating.Create`.
 - Covered by [Gatherings](../design/compositions/Gatherings.md), line 5.
-- Covered by [Gatherings](../design/compositions/Gatherings.md), line 20.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 24.
 
 ```reaction
 when Reserving.openPool (capacity, resource: gathering), asked by Gatherings.Creating.Create#3
@@ -523,7 +524,7 @@ then
 
 Authored path: `Gatherings.Managing.Cancel`.
 - Covered by [Gatherings](../design/compositions/Gatherings.md), line 17.
-- Covered by [Gatherings](../design/compositions/Gatherings.md), line 25.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 29.
 
 ```reaction
 when RequestBoundary.request (gathering, path: "/gatherings/cancel", requestId, session)
@@ -537,7 +538,7 @@ then
 
 Authored path: `Gatherings.Managing.Cancel`.
 - Covered by [Gatherings](../design/compositions/Gatherings.md), line 17.
-- Covered by [Gatherings](../design/compositions/Gatherings.md), line 25.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 29.
 
 ```reaction
 when Sessioning.current (now, session, subject: user), asked by Gatherings.Managing.Cancel
@@ -551,7 +552,7 @@ then
 
 Authored path: `Gatherings.Managing.Cancel`.
 - Covered by [Gatherings](../design/compositions/Gatherings.md), line 17.
-- Covered by [Gatherings](../design/compositions/Gatherings.md), line 25.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 29.
 
 ```reaction
 when Hosting.cancel (gathering, host: user, now), asked by Gatherings.Managing.Cancel#2
@@ -563,7 +564,7 @@ then
 
 Authored path: `Gatherings.Managing.Cancel`.
 - Covered by [Gatherings](../design/compositions/Gatherings.md), line 17.
-- Covered by [Gatherings](../design/compositions/Gatherings.md), line 25.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 29.
 
 ```reaction
 when Reserving.lock (resource: gathering), asked by Gatherings.Managing.Cancel#3
@@ -577,7 +578,7 @@ then
 
 Authored path: `Gatherings.Managing.Confirm`.
 - Covered by [Gatherings](../design/compositions/Gatherings.md), line 17.
-- Covered by [Gatherings](../design/compositions/Gatherings.md), line 23.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 27.
 
 ```reaction
 when RequestBoundary.request (gathering, path: "/gatherings/confirm", requestId, session)
@@ -591,7 +592,7 @@ then
 
 Authored path: `Gatherings.Managing.Confirm`.
 - Covered by [Gatherings](../design/compositions/Gatherings.md), line 17.
-- Covered by [Gatherings](../design/compositions/Gatherings.md), line 23.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 27.
 
 ```reaction
 when Sessioning.current (now, session, subject: user), asked by Gatherings.Managing.Confirm
@@ -605,7 +606,7 @@ then
 
 Authored path: `Gatherings.Managing.Confirm`.
 - Covered by [Gatherings](../design/compositions/Gatherings.md), line 17.
-- Covered by [Gatherings](../design/compositions/Gatherings.md), line 23.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 27.
 
 ```reaction
 when Hosting.confirm (gathering, host: user, now), asked by Gatherings.Managing.Confirm#2
@@ -619,7 +620,7 @@ then
 
 Authored path: `Gatherings.Managing.MarkBooked`.
 - Covered by [Gatherings](../design/compositions/Gatherings.md), line 17.
-- Covered by [Gatherings](../design/compositions/Gatherings.md), line 24.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 28.
 
 ```reaction
 when RequestBoundary.request (gathering, path: "/gatherings/book", requestId, session)
@@ -633,7 +634,7 @@ then
 
 Authored path: `Gatherings.Managing.MarkBooked`.
 - Covered by [Gatherings](../design/compositions/Gatherings.md), line 17.
-- Covered by [Gatherings](../design/compositions/Gatherings.md), line 24.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 28.
 
 ```reaction
 when Sessioning.current (now, session, subject: user), asked by Gatherings.Managing.MarkBooked
@@ -647,7 +648,7 @@ then
 
 Authored path: `Gatherings.Managing.MarkBooked`.
 - Covered by [Gatherings](../design/compositions/Gatherings.md), line 17.
-- Covered by [Gatherings](../design/compositions/Gatherings.md), line 24.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 28.
 
 ```reaction
 when Hosting.markBooked (gathering, host: user), asked by Gatherings.Managing.MarkBooked#2
@@ -661,7 +662,7 @@ then
 
 Authored path: `Gatherings.Viewing.Mine`.
 - Covered by [Gatherings](../design/compositions/Gatherings.md), line 9.
-- Covered by [Gatherings](../design/compositions/Gatherings.md), line 21.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 25.
 
 ```reaction
 when RequestBoundary.request (path: "/gatherings/mine", requestId, session)
@@ -675,7 +676,7 @@ then
 
 Authored path: `Gatherings.Viewing.Mine`.
 - Covered by [Gatherings](../design/compositions/Gatherings.md), line 9.
-- Covered by [Gatherings](../design/compositions/Gatherings.md), line 21.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 25.
 
 ```reaction
 when Sessioning.current (now, session, subject: user), asked by Gatherings.Viewing.Mine
@@ -689,7 +690,7 @@ then
 
 Authored path: `Gatherings.Viewing.View`.
 - Covered by [Gatherings](../design/compositions/Gatherings.md), line 11.
-- Covered by [Gatherings](../design/compositions/Gatherings.md), line 22.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 26.
 
 ```reaction
 when RequestBoundary.request (gathering, path: "/gatherings/view", requestId, session)
@@ -703,7 +704,7 @@ then
 
 Authored path: `Gatherings.Viewing.View`.
 - Covered by [Gatherings](../design/compositions/Gatherings.md), line 11.
-- Covered by [Gatherings](../design/compositions/Gatherings.md), line 22.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 26.
 
 ```reaction
 when Sessioning.current (now, session, subject: user), asked by Gatherings.Viewing.View
@@ -719,7 +720,7 @@ then
 
 Authored path: `Gatherings.Viewing.View`.
 - Covered by [Gatherings](../design/compositions/Gatherings.md), line 11.
-- Covered by [Gatherings](../design/compositions/Gatherings.md), line 22.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 26.
 
 ```reaction
 when Sessioning.current (now, session, subject: user), asked by Gatherings.Viewing.View
@@ -734,7 +735,7 @@ then
 
 Authored path: `Gatherings.Viewing.View`.
 - Covered by [Gatherings](../design/compositions/Gatherings.md), line 11.
-- Covered by [Gatherings](../design/compositions/Gatherings.md), line 22.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 26.
 
 ```reaction
 when Sessioning.current (now, session, subject: user), asked by Gatherings.Viewing.View

@@ -118,5 +118,8 @@ _getHosted(host: Host) : many (gathering: Gathering, title: String, status: Gath
   Returns every gathering of host in any status, latest startTime first, or no rows if host has none.
 
 _getPastCutoff(now: DateTime) : many (gathering: Gathering, status: GatheringStatus)
-  Returns every OPEN gathering with cutoffTime < now and every CONFIRMED gathering with cutoffTime <= now, earliest cutoffTime first, or no rows if there are none.
+  Returns every OPEN gathering with cutoffTime < now and every CONFIRMED or BOOKED gathering with cutoffTime <= now, earliest cutoffTime first, or no rows if there are none.
+
+_getEnded(now: DateTime) : many (gathering: Gathering)
+  Returns every CONFIRMED or BOOKED gathering with endTime <= now, earliest endTime first, or no rows if there are none.
 ```

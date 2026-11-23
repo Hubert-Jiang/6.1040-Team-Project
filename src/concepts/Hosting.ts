@@ -171,14 +171,23 @@ export class HostingConcept {
 
   /**
    * Returns the gatherings whose cutoff needs handling, earliest cutoff first. Those are the OPEN ones
-   * to expire (cutoff strictly passed) and the CONFIRMED ones to lock (cutoff reached). A CONFIRMED
-   * gathering stays in the answer until it is booked or closed, so the caller checks whether it is locked already.
+   * to expire (cutoff strictly passed) and the CONFIRMED or BOOKED ones whose seats freeze (cutoff reached).
+   * A CONFIRMED or BOOKED gathering stays in the answer until it closes, so the caller checks whether it is handled already.
    */
   async _getPastCutoff({ now }: { now: Date }) {
     const rows = await this.gatherings
-      .find({ $or: [{ status: "OPEN", cutoffTime: { $lt: now } }, { status: "CONFIRMED", cutoffTime: { $lte: now } }] })
+      .find({ $or: [{ status: "OPEN", cutoffTime: { $lt: now } }, { status: { $in: ["CONFIRMED", "BOOKED"] }, cutoffTime: { $lte: now } }] })
       .sort({ cutoffTime: 1, _id: 1 })
       .toArray();
     return rows.map(({ _id, status }) => ({ gathering: _id, status }));
+  }
+
+  /** Returns the CONFIRMED and BOOKED gatherings whose time window has ended, earliest end first, which are the ones to close. */
+  async _getEnded({ now }: { now: Date }) {
+    const rows = await this.gatherings
+      .find({ status: { $in: ["CONFIRMED", "BOOKED"] }, endTime: { $lte: now } })
+      .sort({ endTime: 1, _id: 1 })
+      .toArray();
+    return rows.map(({ _id }) => ({ gathering: _id }));
   }
 }
