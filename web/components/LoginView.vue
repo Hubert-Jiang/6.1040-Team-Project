@@ -29,7 +29,10 @@ async function signInAsTestAccount() {
   errorMessage.value = "";
   const result = await client.auth["test-login"]({ returnTo: returnTo.value });
   if ("error" in result) {
-    errorMessage.value = "Could not sign in with the test account.";
+    errorMessage.value =
+      result.error === "FORBIDDEN"
+        ? "Test account login is disabled in this environment."
+        : "Could not sign in with the test account.";
     busy.value = null;
     return;
   }
@@ -57,6 +60,7 @@ async function signInAsTestAccount() {
       {{ busy === "touchstone" ? "Redirecting…" : "Sign in with MIT Touchstone" }}
     </button>
     <button
+      v-if="authState.testLoginEnabled"
       type="button"
       class="btn"
       :disabled="busy !== null"

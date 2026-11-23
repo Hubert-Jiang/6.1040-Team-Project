@@ -57,6 +57,7 @@ export class AuthenticatingConcept {
       this.#users.createIndex({ externalId: 1 }, { unique: true }),
       this.#users.createIndex({ email: 1 }, { unique: true }),
       this.#states.createIndex({ state: 1 }, { unique: true }),
+      this.#states.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
     ]).catch((error: unknown) => {
       this.#indexes = undefined;
       throw error;

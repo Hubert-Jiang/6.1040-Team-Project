@@ -130,15 +130,38 @@ Defined in [Sessioning](../design/concepts/Sessioning.md), line 1.
 
 ## Computations
 
-- `buildPetrockAuthUrl(state: String) : String` — [Auth](../design/compositions/Auth.md), line 38.
-- `hasSession(session?: String) : Flag` — [Auth](../design/compositions/Auth.md), line 32.
-- `normalizeReturnTo(raw?: String) : String` — [Auth](../design/compositions/Auth.md), line 35.
-- `now() : DateTime` — [Auth](../design/compositions/Auth.md), line 26.
-- `sessionLifetimeMs() : Number` — [Auth](../design/compositions/Auth.md), line 29.
-- `testAccountAffiliation() : String` — [Auth](../design/compositions/Auth.md), line 50.
-- `testAccountEmail() : String` — [Auth](../design/compositions/Auth.md), line 44.
-- `testAccountExternalId() : String` — [Auth](../design/compositions/Auth.md), line 41.
-- `testAccountName() : String` — [Auth](../design/compositions/Auth.md), line 47.
+- `buildPetrockAuthUrl(state: String) : String` — [Auth](../design/compositions/Auth.md), line 39.
+- `hasSession(session?: String) : Flag` — [Auth](../design/compositions/Auth.md), line 33.
+- `normalizeReturnTo(raw?: String) : String` — [Auth](../design/compositions/Auth.md), line 36.
+- `now() : DateTime` — [Auth](../design/compositions/Auth.md), line 27.
+- `parseTime(raw: String) : DateTime` — [Gatherings](../design/compositions/Gatherings.md), line 29.
+- `sessionLifetimeMs() : Number` — [Auth](../design/compositions/Auth.md), line 30.
+- `testAccountAffiliation() : String` — [Auth](../design/compositions/Auth.md), line 54.
+- `testAccountEmail() : String` — [Auth](../design/compositions/Auth.md), line 48.
+- `testAccountExternalId() : String` — [Auth](../design/compositions/Auth.md), line 45.
+- `testAccountName() : String` — [Auth](../design/compositions/Auth.md), line 51.
+- `testLoginEnabled() : Flag` — [Auth](../design/compositions/Auth.md), line 42.
+
+## Formers
+
+_Formers name result shapes evaluated when asked. The source former owns_
+_the authored explanation; this section records the generated shape._
+
+### the gatherings hosted by (host)
+
+Authored path: `Gatherings.Viewing.Hosted`.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 9.
+
+```former
+Former "the gatherings hosted by (host)" — inputs (host); bindings (gathering, title, status, startTime); promises exactly one record — forms:
+  a record of
+    tables: each Hosting._getHosted (host) has (gathering, startTime, status, title)
+      form a record of
+        gathering
+        startTime
+        status
+        title
+```
 
 ## Reactions
 
@@ -151,6 +174,8 @@ Authored path: `Auth.Demo.TestLogin`.
 ```reaction
 when RequestBoundary.request (path: "/auth/test-login", requestId, returnTo)
 where
+  enabled is testLoginEnabled
+  enabled is among [true]
   now is now
   lifetime is sessionLifetimeMs
   safeReturnTo is normalizeReturnTo (raw: returnTo)
@@ -192,6 +217,21 @@ where
   safeReturnTo is normalizeReturnTo (raw: returnTo)
 then
   RequestBoundary.respond (affiliation: resolvedAffiliation, domain, email: resolvedEmail, name: resolvedName, requestId, returnTo: safeReturnTo, session, user)
+```
+
+### Auth.Demo.TestLoginDisabled
+
+Authored path: `Auth.Demo.TestLoginDisabled`.
+- Covered by [Auth](../design/compositions/Auth.md), line 11.
+- Covered by [Auth](../design/compositions/Auth.md), line 21.
+
+```reaction
+when RequestBoundary.request (path: "/auth/test-login", requestId, returnTo)
+where
+  enabled is testLoginEnabled
+  enabled is among [false]
+then
+  RequestBoundary.respond (error: "TEST_LOGIN_DISABLED", requestId)
 ```
 
 ### Auth.Petrock.Callback
@@ -301,7 +341,7 @@ then
 
 Authored path: `Auth.Session.Logout`.
 - Covered by [Auth](../design/compositions/Auth.md), line 15.
-- Covered by [Auth](../design/compositions/Auth.md), line 22.
+- Covered by [Auth](../design/compositions/Auth.md), line 23.
 
 ```reaction
 when RequestBoundary.request (path: "/auth/logout", requestId, session)
@@ -315,7 +355,7 @@ then
 
 Authored path: `Auth.Session.Logout`.
 - Covered by [Auth](../design/compositions/Auth.md), line 15.
-- Covered by [Auth](../design/compositions/Auth.md), line 22.
+- Covered by [Auth](../design/compositions/Auth.md), line 23.
 
 ```reaction
 when Sessioning.end (now, session, ended), asked by Auth.Session.Logout
@@ -329,68 +369,72 @@ then
 
 Authored path: `Auth.Session.Me`.
 - Covered by [Auth](../design/compositions/Auth.md), line 15.
-- Covered by [Auth](../design/compositions/Auth.md), line 21.
+- Covered by [Auth](../design/compositions/Auth.md), line 22.
 
 ```reaction
 when RequestBoundary.request (path: "/auth/me", requestId, session)
 where
   sessionPresent is hasSession (session)
   sessionPresent is among [true]
+  testLoginEnabled is testLoginEnabled
   now is now
   Sessioning._active (now, session) has (subject: user)
   Authenticating._getUser (user) has (affiliation, domain, email, name)
 then
-  RequestBoundary.respond (affiliation, authenticated: true, domain, email, name, requestId, user)
+  RequestBoundary.respond (affiliation, authenticated: true, domain, email, name, requestId, testLoginEnabled, user)
 ```
 
 ### Auth.Session.Me:session-inactive
 
 Authored path: `Auth.Session.Me`.
 - Covered by [Auth](../design/compositions/Auth.md), line 15.
-- Covered by [Auth](../design/compositions/Auth.md), line 21.
+- Covered by [Auth](../design/compositions/Auth.md), line 22.
 
 ```reaction
 when RequestBoundary.request (path: "/auth/me", requestId, session)
 where
   sessionPresent is hasSession (session)
   sessionPresent is among [true]
+  testLoginEnabled is testLoginEnabled
   now is now
   no Sessioning._active (now, session)
 then
-  RequestBoundary.respond (authenticated: false, requestId)
+  RequestBoundary.respond (authenticated: false, requestId, testLoginEnabled)
 ```
 
 ### Auth.Session.Me:session-missing
 
 Authored path: `Auth.Session.Me`.
 - Covered by [Auth](../design/compositions/Auth.md), line 15.
-- Covered by [Auth](../design/compositions/Auth.md), line 21.
+- Covered by [Auth](../design/compositions/Auth.md), line 22.
 
 ```reaction
 when RequestBoundary.request (path: "/auth/me", requestId, session)
 where
   sessionPresent is hasSession (session)
   sessionPresent is among [false]
+  testLoginEnabled is testLoginEnabled
 then
-  RequestBoundary.respond (authenticated: false, requestId)
+  RequestBoundary.respond (authenticated: false, requestId, testLoginEnabled)
 ```
 
 ### Auth.Session.Me:user-missing
 
 Authored path: `Auth.Session.Me`.
 - Covered by [Auth](../design/compositions/Auth.md), line 15.
-- Covered by [Auth](../design/compositions/Auth.md), line 21.
+- Covered by [Auth](../design/compositions/Auth.md), line 22.
 
 ```reaction
 when RequestBoundary.request (path: "/auth/me", requestId, session)
 where
   sessionPresent is hasSession (session)
   sessionPresent is among [true]
+  testLoginEnabled is testLoginEnabled
   now is now
   Sessioning._active (now, session) has (subject: user)
   no Authenticating._getUser (user)
 then
-  RequestBoundary.respond (authenticated: false, requestId)
+  RequestBoundary.respond (authenticated: false, requestId, testLoginEnabled)
 ```
 
 ### DeliverFaultToAsker
@@ -413,6 +457,295 @@ then
   RequestBoundary.respond (error: message, requestId)
 ```
 
+### Gatherings.Creating.Create
+
+Authored path: `Gatherings.Creating.Create`.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 5.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 20.
+
+```reaction
+when RequestBoundary.request (area, capacity, confirmedVenue, cutoffTime, details, endTime, path: "/gatherings/create", requestId, session, startTime, title)
+where
+  now is now
+  start is parseTime (raw: startTime)
+  end is parseTime (raw: endTime)
+  cutoff is parseTime (raw: cutoffTime)
+then
+  Sessioning.current (now, session)
+```
+
+### Gatherings.Creating.Create#2
+
+Authored path: `Gatherings.Creating.Create`.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 5.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 20.
+
+```reaction
+when Sessioning.current (now, session, subject: user), asked by Gatherings.Creating.Create
+where
+  earlier, RequestBoundary.request (area, capacity, confirmedVenue, cutoffTime, details, endTime, path: "/gatherings/create", requestId, session, startTime, title)
+  start is parseTime (raw: startTime)
+  end is parseTime (raw: endTime)
+  cutoff is parseTime (raw: cutoffTime)
+then
+  Hosting.create (area, confirmedVenue, cutoffTime: cutoff, details, endTime: end, host: user, now, startTime: start, title)
+```
+
+### Gatherings.Creating.Create#3
+
+Authored path: `Gatherings.Creating.Create`.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 5.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 20.
+
+```reaction
+when Hosting.create (area, confirmedVenue, cutoffTime: cutoff, details, endTime: end, host: user, now, startTime: start, title, gathering), asked by Gatherings.Creating.Create#2
+where
+  earlier, RequestBoundary.request (area, capacity, confirmedVenue, cutoffTime, details, endTime, path: "/gatherings/create", requestId, session, startTime, title)
+then
+  Reserving.openPool (capacity, resource: gathering)
+```
+
+### Gatherings.Creating.Create#4
+
+Authored path: `Gatherings.Creating.Create`.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 5.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 20.
+
+```reaction
+when Reserving.openPool (capacity, resource: gathering), asked by Gatherings.Creating.Create#3
+where
+  earlier, RequestBoundary.request (area, capacity, confirmedVenue, cutoffTime, details, endTime, path: "/gatherings/create", requestId, session, startTime, title)
+then
+  RequestBoundary.respond (gathering, requestId)
+```
+
+### Gatherings.Managing.Cancel
+
+Authored path: `Gatherings.Managing.Cancel`.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 17.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 25.
+
+```reaction
+when RequestBoundary.request (gathering, path: "/gatherings/cancel", requestId, session)
+where
+  now is now
+then
+  Sessioning.current (now, session)
+```
+
+### Gatherings.Managing.Cancel#2
+
+Authored path: `Gatherings.Managing.Cancel`.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 17.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 25.
+
+```reaction
+when Sessioning.current (now, session, subject: user), asked by Gatherings.Managing.Cancel
+where
+  earlier, RequestBoundary.request (gathering, path: "/gatherings/cancel", requestId, session)
+then
+  Hosting.cancel (gathering, host: user, now)
+```
+
+### Gatherings.Managing.Cancel#3
+
+Authored path: `Gatherings.Managing.Cancel`.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 17.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 25.
+
+```reaction
+when Hosting.cancel (gathering, host: user, now), asked by Gatherings.Managing.Cancel#2
+then
+  Reserving.lock (resource: gathering)
+```
+
+### Gatherings.Managing.Cancel#4
+
+Authored path: `Gatherings.Managing.Cancel`.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 17.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 25.
+
+```reaction
+when Reserving.lock (resource: gathering), asked by Gatherings.Managing.Cancel#3
+where
+  earlier, RequestBoundary.request (gathering, path: "/gatherings/cancel", requestId, session)
+then
+  RequestBoundary.respond (requestId)
+```
+
+### Gatherings.Managing.Confirm
+
+Authored path: `Gatherings.Managing.Confirm`.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 17.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 23.
+
+```reaction
+when RequestBoundary.request (gathering, path: "/gatherings/confirm", requestId, session)
+where
+  now is now
+then
+  Sessioning.current (now, session)
+```
+
+### Gatherings.Managing.Confirm#2
+
+Authored path: `Gatherings.Managing.Confirm`.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 17.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 23.
+
+```reaction
+when Sessioning.current (now, session, subject: user), asked by Gatherings.Managing.Confirm
+where
+  earlier, RequestBoundary.request (gathering, path: "/gatherings/confirm", requestId, session)
+then
+  Hosting.confirm (gathering, host: user, now)
+```
+
+### Gatherings.Managing.Confirm#3
+
+Authored path: `Gatherings.Managing.Confirm`.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 17.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 23.
+
+```reaction
+when Hosting.confirm (gathering, host: user, now), asked by Gatherings.Managing.Confirm#2
+where
+  earlier, RequestBoundary.request (gathering, path: "/gatherings/confirm", requestId, session)
+then
+  RequestBoundary.respond (requestId)
+```
+
+### Gatherings.Managing.MarkBooked
+
+Authored path: `Gatherings.Managing.MarkBooked`.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 17.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 24.
+
+```reaction
+when RequestBoundary.request (gathering, path: "/gatherings/book", requestId, session)
+where
+  now is now
+then
+  Sessioning.current (now, session)
+```
+
+### Gatherings.Managing.MarkBooked#2
+
+Authored path: `Gatherings.Managing.MarkBooked`.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 17.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 24.
+
+```reaction
+when Sessioning.current (now, session, subject: user), asked by Gatherings.Managing.MarkBooked
+where
+  earlier, RequestBoundary.request (gathering, path: "/gatherings/book", requestId, session)
+then
+  Hosting.markBooked (gathering, host: user)
+```
+
+### Gatherings.Managing.MarkBooked#3
+
+Authored path: `Gatherings.Managing.MarkBooked`.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 17.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 24.
+
+```reaction
+when Hosting.markBooked (gathering, host: user), asked by Gatherings.Managing.MarkBooked#2
+where
+  earlier, RequestBoundary.request (gathering, path: "/gatherings/book", requestId, session)
+then
+  RequestBoundary.respond (requestId)
+```
+
+### Gatherings.Viewing.Mine
+
+Authored path: `Gatherings.Viewing.Mine`.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 9.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 21.
+
+```reaction
+when RequestBoundary.request (path: "/gatherings/mine", requestId, session)
+where
+  now is now
+then
+  Sessioning.current (now, session)
+```
+
+### Gatherings.Viewing.Mine#2
+
+Authored path: `Gatherings.Viewing.Mine`.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 9.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 21.
+
+```reaction
+when Sessioning.current (now, session, subject: user), asked by Gatherings.Viewing.Mine
+where
+  earlier, RequestBoundary.request (path: "/gatherings/mine", requestId, session)
+then
+  RequestBoundary.respond (hosted: former "the gatherings hosted by (host)" with (host: user), requestId)
+```
+
+### Gatherings.Viewing.View
+
+Authored path: `Gatherings.Viewing.View`.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 11.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 22.
+
+```reaction
+when RequestBoundary.request (gathering, path: "/gatherings/view", requestId, session)
+where
+  now is now
+then
+  Sessioning.current (now, session)
+```
+
+### Gatherings.Viewing.View:no-pool#2
+
+Authored path: `Gatherings.Viewing.View`.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 11.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 22.
+
+```reaction
+when Sessioning.current (now, session, subject: user), asked by Gatherings.Viewing.View
+where
+  earlier, RequestBoundary.request (gathering, path: "/gatherings/view", requestId, session)
+  Hosting._getDetails (gathering) has (host: user)
+  no Reserving._getAvailability (resource: gathering)
+then
+  RequestBoundary.respond (error: "NO_SUCH_TABLE", requestId)
+```
+
+### Gatherings.Viewing.View:not-own-table#2
+
+Authored path: `Gatherings.Viewing.View`.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 11.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 22.
+
+```reaction
+when Sessioning.current (now, session, subject: user), asked by Gatherings.Viewing.View
+where
+  earlier, RequestBoundary.request (gathering, path: "/gatherings/view", requestId, session)
+  no Hosting._getDetails (gathering) has (host: user)
+then
+  RequestBoundary.respond (error: "NO_SUCH_TABLE", requestId)
+```
+
+### Gatherings.Viewing.View:own-table#2
+
+Authored path: `Gatherings.Viewing.View`.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 11.
+- Covered by [Gatherings](../design/compositions/Gatherings.md), line 22.
+
+```reaction
+when Sessioning.current (now, session, subject: user), asked by Gatherings.Viewing.View
+where
+  earlier, RequestBoundary.request (gathering, path: "/gatherings/view", requestId, session)
+  Hosting._getDetails (gathering) has (area, confirmedVenue, cutoffTime, details, endTime, host: user, startTime, status, title)
+  Reserving._getAvailability (resource: gathering) has (capacity, locked, remaining, reservedCount, waitlistCount)
+then
+  RequestBoundary.respond (area, capacity, confirmedVenue, cutoffTime, details, endTime, locked, remaining, requestId, reservedCount, startTime, status, title, waitlistCount)
+```
+
 ## Endpoint input contracts
 
 Before recording an action ask, the boundary rejects a body that is not an
@@ -425,3 +758,9 @@ not listed here have no explicit input contract.
 - `/auth/petrock/callback` — requires `code`, `state`
 - `/auth/petrock/start` — fills `returnTo` with null when absent
 - `/auth/test-login` — fills `returnTo` with null when absent
+- `/gatherings/book` — requires `session`, `gathering`
+- `/gatherings/cancel` — requires `session`, `gathering`
+- `/gatherings/confirm` — requires `session`, `gathering`
+- `/gatherings/create` — requires `session`, `title`, `area`, `startTime`, `endTime`, `cutoffTime`, `capacity`; fills `confirmedVenue` with "" when absent; fills `details` with "" when absent
+- `/gatherings/mine` — requires `session`
+- `/gatherings/view` — requires `session`, `gathering`

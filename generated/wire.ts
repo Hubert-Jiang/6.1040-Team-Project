@@ -6,6 +6,7 @@ import type { applicationConceptSet as ApplicationConceptSet } from "../src/conc
 type AtPath<T, P extends readonly string[]> = P extends readonly [infer H extends string, ...infer R extends string[]] ? H extends keyof T ? AtPath<T[H], R> : H extends `${number}` ? T extends readonly (infer Item)[] ? AtPath<Item, R> : never : never : T;
 type QueryRow<T> = T extends readonly (infer Row)[] ? Row : T;
 type AllOf<T extends readonly unknown[]> = T extends readonly [infer Head, ...infer Rest] ? Head & AllOf<Rest> : unknown;
+type OneOf<T extends readonly unknown[]> = T[number];
 type Jsonify<T> = T extends Date ? string : T extends null | boolean | number | string ? T : T extends (...args: never[]) => unknown ? never : T extends readonly (infer Item)[] ? Jsonify<Item>[] : T extends object ? { [K in keyof T]: Jsonify<T[K]> } : never;
 
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
@@ -32,9 +33,17 @@ export type AppWire = {
       "domain": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Authenticating"]["_getUser"]>>>, ["domain"]>>;
       "email": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Authenticating"]["_getUser"]>>>, ["email"]>>;
       "name": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Authenticating"]["_getUser"]>>>, ["name"]>>;
+      "testLoginEnabled": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["testLoginEnabled"]["fn"]>>, []>>;
       "user": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Authenticating"]["_getUser"]>[0], ["user"]>, AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Sessioning"]["_active"]>>>, ["subject"]>]>>;
     } | {
       "authenticated": false;
+      "testLoginEnabled": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["testLoginEnabled"]["fn"]>>, []>>;
+    } | {
+      "authenticated": false;
+      "testLoginEnabled": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["testLoginEnabled"]["fn"]>>, []>>;
+    } | {
+      "authenticated": false;
+      "testLoginEnabled": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["testLoginEnabled"]["fn"]>>, []>>;
     };
     error: { error: AppWideError | "INVALID_INPUT" };
   };
@@ -76,7 +85,86 @@ export type AppWire = {
       "session": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Sessioning"]["start"]>>, ["session"]>>;
       "user": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["start"]>[0], ["subject"]>, AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Authenticating"]["_getUser"]>[0], ["user"]>]>>;
     };
-    error: { error: AppWideError | "EMAIL_CONFLICT" | "INVALID_IDENTITY" | "INVALID_INPUT" | "INVALID_SESSION_LIFETIME" };
+    error: { error: AppWideError | "EMAIL_CONFLICT" | "INVALID_IDENTITY" | "INVALID_INPUT" | "INVALID_SESSION_LIFETIME" | "TEST_LOGIN_DISABLED" };
+  };
+  "/gatherings/book": {
+    input: {
+      "gathering": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["markBooked"]>[0], ["gathering"]>>;
+      "session": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>[0], ["session"]>>;
+    };
+    output: Record<string, never>;
+    error: { error: AppWideError | "CANNOT_BOOK" | "INVALID_INPUT" | "NOT_HOST" | "UNKNOWN_SESSION" };
+  };
+  "/gatherings/cancel": {
+    input: {
+      "gathering": Jsonify<OneOf<[AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["cancel"]>[0], ["gathering"]>, AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Reserving"]["lock"]>[0], ["resource"]>]>>;
+      "session": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>[0], ["session"]>>;
+    };
+    output: Record<string, never>;
+    error: { error: AppWideError | "CANNOT_CANCEL" | "INVALID_INPUT" | "NOT_HOST" | "UNKNOWN_SESSION" };
+  };
+  "/gatherings/confirm": {
+    input: {
+      "gathering": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["confirm"]>[0], ["gathering"]>>;
+      "session": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>[0], ["session"]>>;
+    };
+    output: Record<string, never>;
+    error: { error: AppWideError | "CANNOT_CONFIRM" | "INVALID_INPUT" | "NOT_HOST" | "UNKNOWN_SESSION" };
+  };
+  "/gatherings/create": {
+    input: {
+      "area": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["create"]>[0], ["area"]>>;
+      "capacity": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Reserving"]["openPool"]>[0], ["capacity"]>>;
+      "confirmedVenue"?: Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["create"]>[0], ["confirmedVenue"]>>;
+      "cutoffTime": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.computations)["parseTime"]["fn"]>[0], ["raw"]>>;
+      "details"?: Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["create"]>[0], ["details"]>>;
+      "endTime": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.computations)["parseTime"]["fn"]>[0], ["raw"]>>;
+      "session": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>[0], ["session"]>>;
+      "startTime": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.computations)["parseTime"]["fn"]>[0], ["raw"]>>;
+      "title": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["create"]>[0], ["title"]>>;
+    };
+    output: {
+      "gathering": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Reserving"]["openPool"]>[0], ["resource"]>>;
+    };
+    error: { error: AppWideError | "HOST_LIMIT_REACHED" | "INVALID_DETAILS" | "INVALID_INPUT" | "INVALID_POOL" | "INVALID_SCHEDULE" | "UNKNOWN_SESSION" };
+  };
+  "/gatherings/mine": {
+    input: {
+      "session": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>[0], ["session"]>>;
+    };
+    output: {
+      "hosted": {
+        "tables": {
+          "gathering": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getHosted"]>>>, ["gathering"]>>;
+          "startTime": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getHosted"]>>>, ["startTime"]>>;
+          "status": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getHosted"]>>>, ["status"]>>;
+          "title": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getHosted"]>>>, ["title"]>>;
+        }[];
+      };
+    };
+    error: { error: AppWideError | "INVALID_INPUT" | "UNKNOWN_SESSION" };
+  };
+  "/gatherings/view": {
+    input: {
+      "gathering": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>[0], ["gathering"]>>;
+      "session": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>[0], ["session"]>>;
+    };
+    output: {
+      "area": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>>>, ["area"]>>;
+      "capacity": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Reserving"]["_getAvailability"]>>>, ["capacity"]>>;
+      "confirmedVenue": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>>>, ["confirmedVenue"]>>;
+      "cutoffTime": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>>>, ["cutoffTime"]>>;
+      "details": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>>>, ["details"]>>;
+      "endTime": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>>>, ["endTime"]>>;
+      "locked": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Reserving"]["_getAvailability"]>>>, ["locked"]>>;
+      "remaining": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Reserving"]["_getAvailability"]>>>, ["remaining"]>>;
+      "reservedCount": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Reserving"]["_getAvailability"]>>>, ["reservedCount"]>>;
+      "startTime": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>>>, ["startTime"]>>;
+      "status": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>>>, ["status"]>>;
+      "title": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>>>, ["title"]>>;
+      "waitlistCount": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Reserving"]["_getAvailability"]>>>, ["waitlistCount"]>>;
+    };
+    error: { error: AppWideError | "INVALID_INPUT" | "NO_SUCH_TABLE" | "UNKNOWN_SESSION" };
   };
 };
 
@@ -102,9 +190,17 @@ export type AppWireHttp = {
       "domain": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Authenticating"]["_getUser"]>>>, ["domain"]>>;
       "email": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Authenticating"]["_getUser"]>>>, ["email"]>>;
       "name": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Authenticating"]["_getUser"]>>>, ["name"]>>;
+      "testLoginEnabled": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["testLoginEnabled"]["fn"]>>, []>>;
       "user": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Authenticating"]["_getUser"]>[0], ["user"]>, AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Sessioning"]["_active"]>>>, ["subject"]>]>>;
     } | {
       "authenticated": false;
+      "testLoginEnabled": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["testLoginEnabled"]["fn"]>>, []>>;
+    } | {
+      "authenticated": false;
+      "testLoginEnabled": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["testLoginEnabled"]["fn"]>>, []>>;
+    } | {
+      "authenticated": false;
+      "testLoginEnabled": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["testLoginEnabled"]["fn"]>>, []>>;
     };
     error: { error: HttpAppWideError | "INVALID_REQUEST" };
   };
@@ -146,6 +242,85 @@ export type AppWireHttp = {
       "session": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Sessioning"]["start"]>>, ["session"]>>;
       "user": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["start"]>[0], ["subject"]>, AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Authenticating"]["_getUser"]>[0], ["user"]>]>>;
     };
-    error: { error: HttpAppWideError | "CONFLICT" | "INTERNAL_ERROR" | "INVALID_REQUEST" };
+    error: { error: HttpAppWideError | "CONFLICT" | "FORBIDDEN" | "INTERNAL_ERROR" | "INVALID_REQUEST" };
+  };
+  "/gatherings/book": {
+    input: {
+      "gathering": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["markBooked"]>[0], ["gathering"]>>;
+      "session": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>[0], ["session"]>>;
+    };
+    output: Record<string, never>;
+    error: { error: HttpAppWideError | "CONFLICT" | "INVALID_REQUEST" | "NOT_FOUND" | "UNAUTHORIZED" };
+  };
+  "/gatherings/cancel": {
+    input: {
+      "gathering": Jsonify<OneOf<[AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["cancel"]>[0], ["gathering"]>, AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Reserving"]["lock"]>[0], ["resource"]>]>>;
+      "session": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>[0], ["session"]>>;
+    };
+    output: Record<string, never>;
+    error: { error: HttpAppWideError | "CONFLICT" | "INVALID_REQUEST" | "NOT_FOUND" | "UNAUTHORIZED" };
+  };
+  "/gatherings/confirm": {
+    input: {
+      "gathering": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["confirm"]>[0], ["gathering"]>>;
+      "session": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>[0], ["session"]>>;
+    };
+    output: Record<string, never>;
+    error: { error: HttpAppWideError | "CONFLICT" | "INVALID_REQUEST" | "NOT_FOUND" | "UNAUTHORIZED" };
+  };
+  "/gatherings/create": {
+    input: {
+      "area": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["create"]>[0], ["area"]>>;
+      "capacity": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Reserving"]["openPool"]>[0], ["capacity"]>>;
+      "confirmedVenue"?: Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["create"]>[0], ["confirmedVenue"]>>;
+      "cutoffTime": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.computations)["parseTime"]["fn"]>[0], ["raw"]>>;
+      "details"?: Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["create"]>[0], ["details"]>>;
+      "endTime": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.computations)["parseTime"]["fn"]>[0], ["raw"]>>;
+      "session": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>[0], ["session"]>>;
+      "startTime": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.computations)["parseTime"]["fn"]>[0], ["raw"]>>;
+      "title": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["create"]>[0], ["title"]>>;
+    };
+    output: {
+      "gathering": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Reserving"]["openPool"]>[0], ["resource"]>>;
+    };
+    error: { error: HttpAppWideError | "CONFLICT" | "INVALID_REQUEST" | "UNAUTHORIZED" };
+  };
+  "/gatherings/mine": {
+    input: {
+      "session": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>[0], ["session"]>>;
+    };
+    output: {
+      "hosted": {
+        "tables": {
+          "gathering": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getHosted"]>>>, ["gathering"]>>;
+          "startTime": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getHosted"]>>>, ["startTime"]>>;
+          "status": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getHosted"]>>>, ["status"]>>;
+          "title": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getHosted"]>>>, ["title"]>>;
+        }[];
+      };
+    };
+    error: { error: HttpAppWideError | "INVALID_REQUEST" | "UNAUTHORIZED" };
+  };
+  "/gatherings/view": {
+    input: {
+      "gathering": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>[0], ["gathering"]>>;
+      "session": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>[0], ["session"]>>;
+    };
+    output: {
+      "area": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>>>, ["area"]>>;
+      "capacity": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Reserving"]["_getAvailability"]>>>, ["capacity"]>>;
+      "confirmedVenue": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>>>, ["confirmedVenue"]>>;
+      "cutoffTime": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>>>, ["cutoffTime"]>>;
+      "details": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>>>, ["details"]>>;
+      "endTime": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>>>, ["endTime"]>>;
+      "locked": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Reserving"]["_getAvailability"]>>>, ["locked"]>>;
+      "remaining": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Reserving"]["_getAvailability"]>>>, ["remaining"]>>;
+      "reservedCount": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Reserving"]["_getAvailability"]>>>, ["reservedCount"]>>;
+      "startTime": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>>>, ["startTime"]>>;
+      "status": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>>>, ["status"]>>;
+      "title": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>>>, ["title"]>>;
+      "waitlistCount": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Reserving"]["_getAvailability"]>>>, ["waitlistCount"]>>;
+    };
+    error: { error: HttpAppWideError | "INVALID_REQUEST" | "NOT_FOUND" | "UNAUTHORIZED" };
   };
 };

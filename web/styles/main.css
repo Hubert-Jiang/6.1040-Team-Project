@@ -64,3 +64,26 @@ body {
   border-radius: 10px;
   padding: 1.25rem;
 }
+
+input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid #d4d4d8;
+  font: inherit;
+}
+
+a.btn {
+  display: block;
+  text-align: center;
+  text-decoration: none;
+}
+
+label.stack {
+  gap: 0.25rem;
+  font-size: 0.9rem;
+}
+
+body {
+  padding: 1rem 0;
+}
