@@ -1,4 +1,5 @@
 import { assembleApplication } from "./assembly.ts";
+import { readPetrockConfig } from "./auth/petrock.ts";
 import { sweepCutoffs } from "./cutoffs.ts";
 import { connectDatabase } from "./db.ts";
 import { startHost } from "./host.ts";
@@ -7,8 +8,15 @@ const { database, close } = await connectDatabase();
 const port = Number(process.env.PORT ?? 8080);
 const hostname = process.env.HOST ?? "127.0.0.1";
 const server = startHost({ hostname, port, database });
+const petrock = readPetrockConfig();
 
 console.log(`Server listening at http://${server.hostname}:${server.port} (db: ${database.databaseName})`);
+console.log(
+  `Petrock OIDC config: authority=${petrock.authority} redirectUri=${petrock.redirectUri} clientId=${petrock.clientId || "<missing>"} clientSecret=${petrock.clientSecret ? "<set>" : "<missing>"}`,
+);
+if (!petrock.clientId || !petrock.clientSecret) {
+  console.warn("Warning: PETROCK_CLIENT_ID or PETROCK_CLIENT_SECRET is missing; MIT Touchstone sign-in will fail.");
+}
 
 // how often tables are checked against their cutoff and end times, in milliseconds
 const SWEEP_MS = 60_000;

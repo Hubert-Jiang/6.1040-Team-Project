@@ -18,12 +18,28 @@ export interface PetrockClient {
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 
+async function readOAuthErrorDetail(response: Response): Promise<string> {
+  try {
+    const text = (await response.text()).trim();
+    if (!text) return "";
+    try {
+      const parsed = JSON.parse(text) as { error?: string; error_description?: string; error_message?: string };
+      const detail = [parsed.error, parsed.error_description ?? parsed.error_message].filter(Boolean).join(": ");
+      return detail ? ` (${detail.slice(0, 200)})` : "";
+    } catch {
+      return ` (${text.slice(0, 200)})`;
+    }
+  } catch {
+    return "";
+  }
+}
+
 /** Reads Petrock OIDC configuration from environment variables. */
 export function readPetrockConfig(env: Record<string, string | undefined> = process.env): PetrockConfig {
-  const authority = (env.PETROCK_AUTHORITY ?? "https://petrock.mit.edu").replace(/\/+$/, "");
-  const clientId = env.PETROCK_CLIENT_ID ?? "";
-  const clientSecret = env.PETROCK_CLIENT_SECRET ?? "";
-  const redirectUri = env.PETROCK_REDIRECT_URI ?? "http://127.0.0.1:8080/auth/petrock/callback";
+  const authority = (env.PETROCK_AUTHORITY?.trim() || "https://petrock.mit.edu").replace(/\/+$/, "");
+  const clientId = env.PETROCK_CLIENT_ID?.trim() ?? "";
+  const clientSecret = env.PETROCK_CLIENT_SECRET?.trim() ?? "";
+  const redirectUri = env.PETROCK_REDIRECT_URI?.trim() || "http://127.0.0.1:8080/auth/petrock/callback";
   return { authority, clientId, clientSecret, redirectUri };
 }
 
@@ -68,7 +84,8 @@ export async function exchangePetrockCode(
     signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
   });
   if (!tokenResponse.ok) {
-    throw new Error(`Petrock token endpoint returned status ${tokenResponse.status}`);
+    const detail = await readOAuthErrorDetail(tokenResponse);
+    throw new Error(`Petrock token endpoint returned status ${tokenResponse.status}${detail}`);
   }
 
   const tokenJson = (await tokenResponse.json()) as { access_token?: string };
@@ -85,7 +102,8 @@ export async function exchangePetrockCode(
     signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
   });
   if (!userInfoResponse.ok) {
-    throw new Error(`Petrock userinfo endpoint returned status ${userInfoResponse.status}`);
+    const detail = await readOAuthErrorDetail(userInfoResponse);
+    throw new Error(`Petrock userinfo endpoint returned status ${userInfoResponse.status}${detail}`);
   }
 
   const info = (await userInfoResponse.json()) as {

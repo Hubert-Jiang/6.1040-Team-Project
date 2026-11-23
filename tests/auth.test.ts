@@ -2,7 +2,7 @@ import { afterAll, beforeEach, expect, test } from "bun:test";
 import { createHttpClient, type HttpClientError } from "@mit-sdg/sync-engine-http/client";
 import type { Client } from "@mit-sdg/sync-engine/client";
 import type { AppWireHttp } from "../generated/wire.ts";
-import type { PetrockClient } from "../src/auth/petrock.ts";
+import { type PetrockClient, exchangePetrockCode, readPetrockConfig } from "../src/auth/petrock.ts";
 import { startHost } from "../src/host.ts";
 import { testDatabase } from "./support/mongo.ts";
 
@@ -155,4 +155,52 @@ test("test-login is refused unless ENABLE_TEST_LOGIN=true outside production", a
   process.env.NODE_ENV = "production";
   expect(await client.auth["test-login"]({})).toEqual({ error: "FORBIDDEN" });
   expect(await client.auth.me({})).toEqual({ authenticated: false, testLoginEnabled: false });
+});
+
+test("readPetrockConfig trims values and falls back on blank authority or redirectUri", () => {
+  expect(
+    readPetrockConfig({
+      PETROCK_AUTHORITY: " https://petrock.mit.edu/ ",
+      PETROCK_CLIENT_ID: " 4d2lKAvZixtV\n",
+      PETROCK_CLIENT_SECRET: " secret ",
+      PETROCK_REDIRECT_URI: " https://seat.mit-sdg.dev/auth/petrock/callback ",
+    }),
+  ).toEqual({
+    authority: "https://petrock.mit.edu",
+    clientId: "4d2lKAvZixtV",
+    clientSecret: "secret",
+    redirectUri: "https://seat.mit-sdg.dev/auth/petrock/callback",
+  });
+
+  expect(
+    readPetrockConfig({
+      PETROCK_AUTHORITY: "   ",
+      PETROCK_REDIRECT_URI: "",
+    }),
+  ).toEqual({
+    authority: "https://petrock.mit.edu",
+    clientId: "",
+    clientSecret: "",
+    redirectUri: "http://127.0.0.1:8080/auth/petrock/callback",
+  });
+});
+
+test("exchangePetrockCode surfaces OAuth error details from token endpoint failures", async () => {
+  const mockFetch = (async () =>
+    new Response(JSON.stringify({ error: "invalid_client", error_description: "Bad client secret" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    })) as unknown as typeof globalThis.fetch;
+
+  await expect(
+    exchangePetrockCode("some-code", {
+      config: {
+        authority: "https://petrock.mit.edu",
+        clientId: "cid",
+        clientSecret: "wrong",
+        redirectUri: "https://seat.mit-sdg.dev/auth/petrock/callback",
+      },
+      fetch: mockFetch,
+    }),
+  ).rejects.toThrow("Petrock token endpoint returned status 401 (invalid_client: Bad client secret)");
 });

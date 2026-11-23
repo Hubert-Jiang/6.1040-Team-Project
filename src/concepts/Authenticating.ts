@@ -180,6 +180,7 @@ export class AuthenticatingConcept {
         ...(info.affiliation ? { affiliation: info.affiliation } : {}),
       };
     } catch (error) {
+      console.warn(`Petrock OIDC verification failed: ${error}`);
       if (error instanceof OidcExchangeFailed) throw error;
       throw new OidcExchangeFailed("Could not verify identity with MIT Touchstone via Petrock.");
     }
