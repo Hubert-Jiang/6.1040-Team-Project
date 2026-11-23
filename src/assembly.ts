@@ -2,6 +2,7 @@ import { assemble } from "@mit-sdg/sync-engine/assembly";
 import type { Db } from "mongodb";
 import type { PetrockClient } from "./auth/petrock.ts";
 import { authComposition } from "./compositions/auth.ts";
+import { tablesComposition } from "./compositions/tables.ts";
 import { gatheringsComposition } from "./compositions/gatherings.ts";
 import { applicationConceptSet } from "./concepts.ts";
 
@@ -15,6 +16,6 @@ export function assembleApplication({
   return assemble({
     conceptSet: applicationConceptSet,
     instances: applicationConceptSet.implementations("mongo", { database, petrock }),
-    composition: { Auth: authComposition, Gatherings: gatheringsComposition },
+    composition: { Auth: authComposition, Gatherings: gatheringsComposition, Tables: tablesComposition },
   });
 }

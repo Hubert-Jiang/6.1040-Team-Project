@@ -68,6 +68,55 @@ Defined in [Hosting](../design/concepts/Hosting.md), line 1.
 - `Hosting` — instance of `Hosting` — [Application Types and Instances](../design/types.md), line 10.
   - `Host` is `Authenticating.User` — [Application Types and Instances](../design/types.md), line 11.
 
+### Inviting
+
+Defined in [Inviting](../design/concepts/Inviting.md), line 1.
+
+#### Actions
+
+- `accept(event: Event, guest: Guest) : returns (acceptance: Acceptance)`
+  - Refuses `ALREADY_ACCEPTED`: You have already accepted this invitation.
+- `withdraw(event: Event, guest: Guest) : returns ()`
+  - Refuses `NOT_ACCEPTED`: You have not accepted this invitation.
+- `deferAccept(event: Event, pendingKey: String) : returns ()`
+  - Refuses `INVALID_PENDING_KEY`: A non-empty pending key is required.
+- `clearPending(event: Event, pendingKey: String) : returns ()`
+
+#### Queries
+
+- `_isAccepted(event: Event, guest: Guest) : one (accepted: Flag)`
+- `_getAcceptedGuests(event: Event) : many (guest: Guest)`
+- `_getPendingForKey(pendingKey: String) : many (event: Event)`
+
+#### Instances
+
+- `Inviting` — instance of `Inviting` — [Application Types and Instances](../design/types.md), line 18.
+  - `Event` is `Hosting.Gathering` — [Application Types and Instances](../design/types.md), line 19.
+  - `Guest` is `Authenticating.User` — [Application Types and Instances](../design/types.md), line 20.
+
+### Linking
+
+Defined in [Linking](../design/concepts/Linking.md), line 1.
+
+#### Actions
+
+- `createLink(target: Target, creator: Creator, label?: String, expiresAt?: DateTime, now: DateTime) : returns (link: Link, token: String)`
+  - Refuses `INVALID_EXPIRY`: Link expiration must be in the future.
+- `revokeLink(link: Link, creator: Creator) : returns ()`
+  - Refuses `NOT_CREATOR`: Only the link creator can revoke this link.
+- `revokeAllForTarget(target: Target) : returns ()`
+
+#### Queries
+
+- `_resolve(token: String, now: DateTime) : optional (target: Target, link: Link)`
+- `_listForTarget(target: Target) : many (link: Link, token: String, label?: String, active: Flag, expiresAt?: DateTime)`
+
+#### Instances
+
+- `Linking` — instance of `Linking` — [Application Types and Instances](../design/types.md), line 15.
+  - `Creator` is `Authenticating.User` — [Application Types and Instances](../design/types.md), line 17.
+  - `Target` is `Hosting.Gathering` — [Application Types and Instances](../design/types.md), line 16.
+
 ### Reserving
 
 Defined in [Reserving](../design/concepts/Reserving.md), line 1.
@@ -133,20 +182,55 @@ Defined in [Sessioning](../design/concepts/Sessioning.md), line 1.
 
 - `buildPetrockAuthUrl(state: String) : String` — [Auth](../design/compositions/Auth.md), line 39.
 - `hasSession(session?: String) : Flag` — [Auth](../design/compositions/Auth.md), line 33.
+- `hasText(value?: String) : Flag` — [Tables](../design/compositions/Tables.md), line 51.
+- `isAcceptingGuests(status: String, locked: Flag, cutoffTime: DateTime, now: DateTime) : Flag` — [Tables](../design/compositions/Tables.md), line 57.
+- `isValidCapacity(capacity?: Number) : Flag` — [Tables](../design/compositions/Tables.md), line 54.
 - `normalizeReturnTo(raw?: String) : String` — [Auth](../design/compositions/Auth.md), line 36.
 - `now() : DateTime` — [Auth](../design/compositions/Auth.md), line 27.
 - `parseTime(raw: String) : DateTime` — [Gatherings](../design/compositions/Gatherings.md), line 33.
 - `sessionLifetimeMs() : Number` — [Auth](../design/compositions/Auth.md), line 30.
-- `testAccountAffiliation() : String` — [Auth](../design/compositions/Auth.md), line 54.
-- `testAccountEmail() : String` — [Auth](../design/compositions/Auth.md), line 48.
-- `testAccountExternalId() : String` — [Auth](../design/compositions/Auth.md), line 45.
-- `testAccountName() : String` — [Auth](../design/compositions/Auth.md), line 51.
+- `testAccountAffiliation(account?: String) : String` — [Auth](../design/compositions/Auth.md), line 54.
+- `testAccountEmail(account?: String) : String` — [Auth](../design/compositions/Auth.md), line 48.
+- `testAccountExternalId(account?: String) : String` — [Auth](../design/compositions/Auth.md), line 45.
+- `testAccountName(account?: String) : String` — [Auth](../design/compositions/Auth.md), line 51.
 - `testLoginEnabled() : Flag` — [Auth](../design/compositions/Auth.md), line 42.
 
 ## Formers
 
 _Formers name result shapes evaluated when asked. The source former owns_
 _the authored explanation; this section records the generated shape._
+
+### a guest's place at a table
+
+Authored path: `Tables.Joining.GuestPlace`.
+- Covered by [Tables](../design/compositions/Tables.md), line 26.
+- Covered by [Tables](../design/compositions/Tables.md), line 32.
+
+```former
+Former "a guest's place at a table" — inputs (gathering, guest); bindings (reservation, position); promises exactly one record — forms:
+  a record of
+    where whether Reserving._getReservation (resource: gathering, user: guest) has (reservation)
+    where whether Reserving._getWaitlistPosition (resource: gathering, user: guest) has (position)
+    position
+    reservation
+```
+
+### a table's links
+
+Authored path: `Tables.Sharing.TableLinks`.
+- Covered by [Tables](../design/compositions/Tables.md), line 42.
+
+```former
+Former "a table's links" — inputs (gathering); bindings (link, token, label, active, expiresAt); promises exactly one record — forms:
+  a record of
+    links: each Linking._listForTarget (target: gathering) has (active, expiresAt, label, link, token)
+      form a record of
+        active
+        expiresAt
+        label
+        link
+        token
+```
 
 ### the gatherings hosted by (host)
 
@@ -155,6 +239,22 @@ Authored path: `Gatherings.Viewing.Hosted`.
 
 ```former
 Former "the gatherings hosted by (host)" — inputs (host); bindings (gathering, title, status, startTime); promises exactly one record — forms:
+  a record of
+    tables: each Hosting._getHosted (host) has (gathering, startTime, status, title)
+      form a record of
+        gathering
+        startTime
+        status
+        title
+```
+
+### the host's tables
+
+Authored path: `Tables.Hosting.HostedTables`.
+- Covered by [Tables](../design/compositions/Tables.md), line 9.
+
+```former
+Former "the host's tables" — inputs (host); bindings (gathering, title, status, startTime); promises exactly one record — forms:
   a record of
     tables: each Hosting._getHosted (host) has (gathering, startTime, status, title)
       form a record of
@@ -173,17 +273,17 @@ Authored path: `Auth.Demo.TestLogin`.
 - Covered by [Auth](../design/compositions/Auth.md), line 20.
 
 ```reaction
-when RequestBoundary.request (path: "/auth/test-login", requestId, returnTo)
+when RequestBoundary.request (account, path: "/auth/test-login", requestId, returnTo)
 where
   enabled is testLoginEnabled
   enabled is among [true]
   now is now
   lifetime is sessionLifetimeMs
   safeReturnTo is normalizeReturnTo (raw: returnTo)
-  externalId is testAccountExternalId
-  email is testAccountEmail
-  name is testAccountName
-  affiliation is testAccountAffiliation
+  externalId is testAccountExternalId (account)
+  email is testAccountEmail (account)
+  name is testAccountName (account)
+  affiliation is testAccountAffiliation (account)
 then
   Authenticating.authenticate (affiliation, email, externalId, name)
 ```
@@ -214,7 +314,7 @@ Authored path: `Auth.Demo.TestLogin`.
 when Sessioning.start (lifetime, now, subject: user, session), asked by Auth.Demo.TestLogin#2
 where
   Authenticating._getUser (user) has (affiliation: resolvedAffiliation, domain, email: resolvedEmail, name: resolvedName)
-  earlier, RequestBoundary.request (path: "/auth/test-login", requestId, returnTo)
+  earlier, RequestBoundary.request (account, path: "/auth/test-login", requestId, returnTo)
   safeReturnTo is normalizeReturnTo (raw: returnTo)
 then
   RequestBoundary.respond (affiliation: resolvedAffiliation, domain, email: resolvedEmail, name: resolvedName, requestId, returnTo: safeReturnTo, session, user)
@@ -747,6 +847,772 @@ then
   RequestBoundary.respond (area, capacity, confirmedVenue, cutoffTime, details, endTime, locked, remaining, requestId, reservedCount, startTime, status, title, waitlistCount)
 ```
 
+### Tables.Hosting.CreateTable
+
+Authored path: `Tables.Hosting.CreateTable`.
+- Covered by [Tables](../design/compositions/Tables.md), line 5.
+- Covered by [Tables](../design/compositions/Tables.md), line 12.
+
+```reaction
+when RequestBoundary.request (area, capacity, confirmedVenue, cutoffTime, details, endTime, linkLabel, path: "/api/tables/create", requestId, scope, session, startTime, title)
+where
+  now is now
+then
+  Sessioning.current (now, session)
+```
+
+### Tables.Hosting.CreateTable:host-in-scope#2
+
+Authored path: `Tables.Hosting.CreateTable`.
+- Covered by [Tables](../design/compositions/Tables.md), line 5.
+- Covered by [Tables](../design/compositions/Tables.md), line 12.
+
+```reaction
+when Sessioning.current (now, session, subject: host), asked by Tables.Hosting.CreateTable
+where
+  earlier, RequestBoundary.request (area, capacity, confirmedVenue, cutoffTime, details, endTime, linkLabel, path: "/api/tables/create", requestId, scope, session, startTime, title)
+  capacityOk is isValidCapacity (capacity)
+  capacityOk is among [true]
+  scoped is hasText (value: scope)
+  scoped is among [true]
+  Authenticating._hasDomain (domain: scope, user: host) has (matches)
+  matches is among [true]
+  start is parseTime (raw: startTime)
+  end is parseTime (raw: endTime)
+  cutoff is parseTime (raw: cutoffTime)
+then
+  Hosting.create (area, confirmedVenue, cutoffTime: cutoff, details, endTime: end, host, now, scope, startTime: start, title)
+```
+
+### Tables.Hosting.CreateTable:host-in-scope#3
+
+Authored path: `Tables.Hosting.CreateTable`.
+- Covered by [Tables](../design/compositions/Tables.md), line 5.
+- Covered by [Tables](../design/compositions/Tables.md), line 12.
+
+```reaction
+when Hosting.create (area, confirmedVenue, cutoffTime: cutoff, details, endTime: end, host, now, scope, startTime: start, title, gathering), asked by Tables.Hosting.CreateTable:host-in-scope#2
+where
+  earlier, RequestBoundary.request (area, capacity, confirmedVenue, cutoffTime, details, endTime, linkLabel, path: "/api/tables/create", requestId, scope, session, startTime, title)
+then
+  Reserving.openPool (capacity, resource: gathering)
+```
+
+### Tables.Hosting.CreateTable:host-in-scope#4
+
+Authored path: `Tables.Hosting.CreateTable`.
+- Covered by [Tables](../design/compositions/Tables.md), line 5.
+- Covered by [Tables](../design/compositions/Tables.md), line 12.
+
+```reaction
+when Reserving.openPool (capacity, resource: gathering), asked by Tables.Hosting.CreateTable:host-in-scope#3
+where
+  earlier, Sessioning.current (now, session, subject: host), asked by Tables.Hosting.CreateTable
+  earlier, RequestBoundary.request (area, capacity, confirmedVenue, cutoffTime, details, endTime, linkLabel, path: "/api/tables/create", requestId, scope, session, startTime, title)
+then
+  Linking.createLink (creator: host, label: linkLabel, now, target: gathering)
+```
+
+### Tables.Hosting.CreateTable:host-in-scope#5
+
+Authored path: `Tables.Hosting.CreateTable`.
+- Covered by [Tables](../design/compositions/Tables.md), line 5.
+- Covered by [Tables](../design/compositions/Tables.md), line 12.
+
+```reaction
+when Linking.createLink (creator: host, label: linkLabel, now, target: gathering, link, token), asked by Tables.Hosting.CreateTable:host-in-scope#4
+where
+  earlier, RequestBoundary.request (area, capacity, confirmedVenue, cutoffTime, details, endTime, linkLabel, path: "/api/tables/create", requestId, scope, session, startTime, title)
+then
+  RequestBoundary.respond (gathering, link, requestId, token)
+```
+
+### Tables.Hosting.CreateTable:host-out-of-scope#2
+
+Authored path: `Tables.Hosting.CreateTable`.
+- Covered by [Tables](../design/compositions/Tables.md), line 5.
+- Covered by [Tables](../design/compositions/Tables.md), line 12.
+
+```reaction
+when Sessioning.current (now, session, subject: host), asked by Tables.Hosting.CreateTable
+where
+  earlier, RequestBoundary.request (area, capacity, confirmedVenue, cutoffTime, details, endTime, linkLabel, path: "/api/tables/create", requestId, scope, session, startTime, title)
+  capacityOk is isValidCapacity (capacity)
+  capacityOk is among [true]
+  scoped is hasText (value: scope)
+  scoped is among [true]
+  Authenticating._hasDomain (domain: scope, user: host) has (matches)
+  matches is among [false]
+then
+  RequestBoundary.respond (error: "SCOPE_MISMATCH", requestId)
+```
+
+### Tables.Hosting.CreateTable:invalid-capacity#2
+
+Authored path: `Tables.Hosting.CreateTable`.
+- Covered by [Tables](../design/compositions/Tables.md), line 5.
+- Covered by [Tables](../design/compositions/Tables.md), line 12.
+
+```reaction
+when Sessioning.current (now, session, subject: host), asked by Tables.Hosting.CreateTable
+where
+  earlier, RequestBoundary.request (area, capacity, confirmedVenue, cutoffTime, details, endTime, linkLabel, path: "/api/tables/create", requestId, scope, session, startTime, title)
+  capacityOk is isValidCapacity (capacity)
+  capacityOk is among [false]
+then
+  RequestBoundary.respond (error: "INVALID_CAPACITY", requestId)
+```
+
+### Tables.Hosting.CreateTable:open-to-anyone#2
+
+Authored path: `Tables.Hosting.CreateTable`.
+- Covered by [Tables](../design/compositions/Tables.md), line 5.
+- Covered by [Tables](../design/compositions/Tables.md), line 12.
+
+```reaction
+when Sessioning.current (now, session, subject: host), asked by Tables.Hosting.CreateTable
+where
+  earlier, RequestBoundary.request (area, capacity, confirmedVenue, cutoffTime, details, endTime, linkLabel, path: "/api/tables/create", requestId, scope, session, startTime, title)
+  capacityOk is isValidCapacity (capacity)
+  capacityOk is among [true]
+  scoped is hasText (value: scope)
+  scoped is among [false]
+  start is parseTime (raw: startTime)
+  end is parseTime (raw: endTime)
+  cutoff is parseTime (raw: cutoffTime)
+then
+  Hosting.create (area, confirmedVenue, cutoffTime: cutoff, details, endTime: end, host, now, scope, startTime: start, title)
+```
+
+### Tables.Hosting.CreateTable:open-to-anyone#3
+
+Authored path: `Tables.Hosting.CreateTable`.
+- Covered by [Tables](../design/compositions/Tables.md), line 5.
+- Covered by [Tables](../design/compositions/Tables.md), line 12.
+
+```reaction
+when Hosting.create (area, confirmedVenue, cutoffTime: cutoff, details, endTime: end, host, now, scope, startTime: start, title, gathering), asked by Tables.Hosting.CreateTable:open-to-anyone#2
+where
+  earlier, RequestBoundary.request (area, capacity, confirmedVenue, cutoffTime, details, endTime, linkLabel, path: "/api/tables/create", requestId, scope, session, startTime, title)
+then
+  Reserving.openPool (capacity, resource: gathering)
+```
+
+### Tables.Hosting.CreateTable:open-to-anyone#4
+
+Authored path: `Tables.Hosting.CreateTable`.
+- Covered by [Tables](../design/compositions/Tables.md), line 5.
+- Covered by [Tables](../design/compositions/Tables.md), line 12.
+
+```reaction
+when Reserving.openPool (capacity, resource: gathering), asked by Tables.Hosting.CreateTable:open-to-anyone#3
+where
+  earlier, Sessioning.current (now, session, subject: host), asked by Tables.Hosting.CreateTable
+  earlier, RequestBoundary.request (area, capacity, confirmedVenue, cutoffTime, details, endTime, linkLabel, path: "/api/tables/create", requestId, scope, session, startTime, title)
+then
+  Linking.createLink (creator: host, label: linkLabel, now, target: gathering)
+```
+
+### Tables.Hosting.CreateTable:open-to-anyone#5
+
+Authored path: `Tables.Hosting.CreateTable`.
+- Covered by [Tables](../design/compositions/Tables.md), line 5.
+- Covered by [Tables](../design/compositions/Tables.md), line 12.
+
+```reaction
+when Linking.createLink (creator: host, label: linkLabel, now, target: gathering, link, token), asked by Tables.Hosting.CreateTable:open-to-anyone#4
+where
+  earlier, RequestBoundary.request (area, capacity, confirmedVenue, cutoffTime, details, endTime, linkLabel, path: "/api/tables/create", requestId, scope, session, startTime, title)
+then
+  RequestBoundary.respond (gathering, link, requestId, token)
+```
+
+### Tables.Hosting.MyTables
+
+Authored path: `Tables.Hosting.MyTables`.
+- Covered by [Tables](../design/compositions/Tables.md), line 9.
+- Covered by [Tables](../design/compositions/Tables.md), line 13.
+
+```reaction
+when RequestBoundary.request (path: "/api/tables/mine", requestId, session)
+where
+  now is now
+then
+  Sessioning.current (now, session)
+```
+
+### Tables.Hosting.MyTables#2
+
+Authored path: `Tables.Hosting.MyTables`.
+- Covered by [Tables](../design/compositions/Tables.md), line 9.
+- Covered by [Tables](../design/compositions/Tables.md), line 13.
+
+```reaction
+when Sessioning.current (now, session, subject: host), asked by Tables.Hosting.MyTables
+where
+  earlier, RequestBoundary.request (path: "/api/tables/mine", requestId, session)
+then
+  RequestBoundary.respond (hosted: former "the host's tables" with (host), requestId)
+```
+
+### Tables.Joining.AcceptTable
+
+Authored path: `Tables.Joining.AcceptTable`.
+- Covered by [Tables](../design/compositions/Tables.md), line 26.
+- Covered by [Tables](../design/compositions/Tables.md), line 35.
+
+```reaction
+when RequestBoundary.request (path: "/api/tables/accept", requestId, session, token)
+where
+  now is now
+then
+  Sessioning.current (now, session)
+```
+
+### Tables.Joining.AcceptTable:guest-in-scope#2
+
+Authored path: `Tables.Joining.AcceptTable`.
+- Covered by [Tables](../design/compositions/Tables.md), line 26.
+- Covered by [Tables](../design/compositions/Tables.md), line 35.
+
+```reaction
+when Sessioning.current (now, session, subject: guest), asked by Tables.Joining.AcceptTable
+where
+  earlier, RequestBoundary.request (path: "/api/tables/accept", requestId, session, token)
+  Linking._resolve (now, token) has (target: gathering)
+  no Hosting._getDetails (gathering) has (host: guest)
+  Hosting._getDetails (gathering) has (cutoffTime, status)
+  Reserving._getAvailability (resource: gathering) has (locked)
+  accepting is isAcceptingGuests (cutoffTime, locked, now, status)
+  accepting is among [true]
+  Hosting._getDetails (gathering) has (scope)
+  scoped is hasText (value: scope)
+  scoped is among [true]
+  Authenticating._hasDomain (domain: scope, user: guest) has (matches)
+  matches is among [true]
+then
+  Inviting.accept (event: gathering, guest)
+```
+
+### Tables.Joining.AcceptTable:guest-in-scope#3
+
+Authored path: `Tables.Joining.AcceptTable`.
+- Covered by [Tables](../design/compositions/Tables.md), line 26.
+- Covered by [Tables](../design/compositions/Tables.md), line 35.
+
+```reaction
+when Inviting.accept (event: gathering, guest), asked by Tables.Joining.AcceptTable:guest-in-scope#2
+then
+  Reserving.claim (resource: gathering, user: guest)
+```
+
+### Tables.Joining.AcceptTable:guest-in-scope#4
+
+Authored path: `Tables.Joining.AcceptTable`.
+- Covered by [Tables](../design/compositions/Tables.md), line 26.
+- Covered by [Tables](../design/compositions/Tables.md), line 35.
+
+```reaction
+when Reserving.claim (resource: gathering, user: guest), asked by Tables.Joining.AcceptTable:guest-in-scope#3
+where
+  earlier, RequestBoundary.request (path: "/api/tables/accept", requestId, session, token)
+then
+  RequestBoundary.respond (gathering, place: former "a guest's place at a table" with (gathering, guest), requestId)
+```
+
+### Tables.Joining.AcceptTable:guest-out-of-scope#2
+
+Authored path: `Tables.Joining.AcceptTable`.
+- Covered by [Tables](../design/compositions/Tables.md), line 26.
+- Covered by [Tables](../design/compositions/Tables.md), line 35.
+
+```reaction
+when Sessioning.current (now, session, subject: guest), asked by Tables.Joining.AcceptTable
+where
+  earlier, RequestBoundary.request (path: "/api/tables/accept", requestId, session, token)
+  Linking._resolve (now, token) has (target: gathering)
+  no Hosting._getDetails (gathering) has (host: guest)
+  Hosting._getDetails (gathering) has (cutoffTime, status)
+  Reserving._getAvailability (resource: gathering) has (locked)
+  accepting is isAcceptingGuests (cutoffTime, locked, now, status)
+  accepting is among [true]
+  Hosting._getDetails (gathering) has (scope)
+  scoped is hasText (value: scope)
+  scoped is among [true]
+  Authenticating._hasDomain (domain: scope, user: guest) has (matches)
+  matches is among [false]
+then
+  RequestBoundary.respond (error: "SCOPE_MISMATCH", requestId)
+```
+
+### Tables.Joining.AcceptTable:link-unknown#2
+
+Authored path: `Tables.Joining.AcceptTable`.
+- Covered by [Tables](../design/compositions/Tables.md), line 26.
+- Covered by [Tables](../design/compositions/Tables.md), line 35.
+
+```reaction
+when Sessioning.current (now, session, subject: guest), asked by Tables.Joining.AcceptTable
+where
+  earlier, RequestBoundary.request (path: "/api/tables/accept", requestId, session, token)
+  no Linking._resolve (now, token)
+then
+  RequestBoundary.respond (error: "LINK_NOT_FOUND", requestId)
+```
+
+### Tables.Joining.AcceptTable:open-to-anyone#2
+
+Authored path: `Tables.Joining.AcceptTable`.
+- Covered by [Tables](../design/compositions/Tables.md), line 26.
+- Covered by [Tables](../design/compositions/Tables.md), line 35.
+
+```reaction
+when Sessioning.current (now, session, subject: guest), asked by Tables.Joining.AcceptTable
+where
+  earlier, RequestBoundary.request (path: "/api/tables/accept", requestId, session, token)
+  Linking._resolve (now, token) has (target: gathering)
+  no Hosting._getDetails (gathering) has (host: guest)
+  Hosting._getDetails (gathering) has (cutoffTime, status)
+  Reserving._getAvailability (resource: gathering) has (locked)
+  accepting is isAcceptingGuests (cutoffTime, locked, now, status)
+  accepting is among [true]
+  Hosting._getDetails (gathering) has (scope)
+  scoped is hasText (value: scope)
+  scoped is among [false]
+then
+  Inviting.accept (event: gathering, guest)
+```
+
+### Tables.Joining.AcceptTable:open-to-anyone#3
+
+Authored path: `Tables.Joining.AcceptTable`.
+- Covered by [Tables](../design/compositions/Tables.md), line 26.
+- Covered by [Tables](../design/compositions/Tables.md), line 35.
+
+```reaction
+when Inviting.accept (event: gathering, guest), asked by Tables.Joining.AcceptTable:open-to-anyone#2
+then
+  Reserving.claim (resource: gathering, user: guest)
+```
+
+### Tables.Joining.AcceptTable:open-to-anyone#4
+
+Authored path: `Tables.Joining.AcceptTable`.
+- Covered by [Tables](../design/compositions/Tables.md), line 26.
+- Covered by [Tables](../design/compositions/Tables.md), line 35.
+
+```reaction
+when Reserving.claim (resource: gathering, user: guest), asked by Tables.Joining.AcceptTable:open-to-anyone#3
+where
+  earlier, RequestBoundary.request (path: "/api/tables/accept", requestId, session, token)
+then
+  RequestBoundary.respond (gathering, place: former "a guest's place at a table" with (gathering, guest), requestId)
+```
+
+### Tables.Joining.AcceptTable:own-table#2
+
+Authored path: `Tables.Joining.AcceptTable`.
+- Covered by [Tables](../design/compositions/Tables.md), line 26.
+- Covered by [Tables](../design/compositions/Tables.md), line 35.
+
+```reaction
+when Sessioning.current (now, session, subject: guest), asked by Tables.Joining.AcceptTable
+where
+  earlier, RequestBoundary.request (path: "/api/tables/accept", requestId, session, token)
+  Linking._resolve (now, token) has (target: gathering)
+  Hosting._getDetails (gathering) has (host: guest)
+then
+  RequestBoundary.respond (error: "OWN_TABLE", requestId)
+```
+
+### Tables.Joining.AcceptTable:table-closed#2
+
+Authored path: `Tables.Joining.AcceptTable`.
+- Covered by [Tables](../design/compositions/Tables.md), line 26.
+- Covered by [Tables](../design/compositions/Tables.md), line 35.
+
+```reaction
+when Sessioning.current (now, session, subject: guest), asked by Tables.Joining.AcceptTable
+where
+  earlier, RequestBoundary.request (path: "/api/tables/accept", requestId, session, token)
+  Linking._resolve (now, token) has (target: gathering)
+  no Hosting._getDetails (gathering) has (host: guest)
+  Hosting._getDetails (gathering) has (cutoffTime, status)
+  Reserving._getAvailability (resource: gathering) has (locked)
+  accepting is isAcceptingGuests (cutoffTime, locked, now, status)
+  accepting is among [false]
+then
+  RequestBoundary.respond (error: "TABLE_CLOSED", requestId)
+```
+
+### Tables.Joining.MyPlace
+
+Authored path: `Tables.Joining.MyPlace`.
+- Covered by [Tables](../design/compositions/Tables.md), line 32.
+- Covered by [Tables](../design/compositions/Tables.md), line 37.
+
+```reaction
+when RequestBoundary.request (gathering, path: "/api/tables/place", requestId, session)
+where
+  now is now
+then
+  Sessioning.current (now, session)
+```
+
+### Tables.Joining.MyPlace:host#2
+
+Authored path: `Tables.Joining.MyPlace`.
+- Covered by [Tables](../design/compositions/Tables.md), line 32.
+- Covered by [Tables](../design/compositions/Tables.md), line 37.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Tables.Joining.MyPlace
+where
+  earlier, RequestBoundary.request (gathering, path: "/api/tables/place", requestId, session)
+  Hosting._getDetails (gathering) has (host: viewer)
+then
+  RequestBoundary.respond (hosting: true, place: former "a guest's place at a table" with (gathering, guest: viewer), requestId)
+```
+
+### Tables.Joining.MyPlace:not-host#2
+
+Authored path: `Tables.Joining.MyPlace`.
+- Covered by [Tables](../design/compositions/Tables.md), line 32.
+- Covered by [Tables](../design/compositions/Tables.md), line 37.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Tables.Joining.MyPlace
+where
+  earlier, RequestBoundary.request (gathering, path: "/api/tables/place", requestId, session)
+  no Hosting._getDetails (gathering) has (host: viewer)
+then
+  RequestBoundary.respond (hosting: false, place: former "a guest's place at a table" with (gathering, guest: viewer), requestId)
+```
+
+### Tables.Joining.WithdrawTable
+
+Authored path: `Tables.Joining.WithdrawTable`.
+- Covered by [Tables](../design/compositions/Tables.md), line 28.
+- Covered by [Tables](../design/compositions/Tables.md), line 36.
+
+```reaction
+when RequestBoundary.request (gathering, path: "/api/tables/withdraw", requestId, session)
+where
+  now is now
+then
+  Sessioning.current (now, session)
+```
+
+### Tables.Joining.WithdrawTable:holding-nothing#2
+
+Authored path: `Tables.Joining.WithdrawTable`.
+- Covered by [Tables](../design/compositions/Tables.md), line 28.
+- Covered by [Tables](../design/compositions/Tables.md), line 36.
+
+```reaction
+when Sessioning.current (now, session, subject: guest), asked by Tables.Joining.WithdrawTable
+where
+  earlier, RequestBoundary.request (gathering, path: "/api/tables/withdraw", requestId, session)
+  no Reserving._getReservation (resource: gathering, user: guest)
+  no Reserving._getWaitlistPosition (resource: gathering, user: guest)
+then
+  Inviting.withdraw (event: gathering, guest)
+```
+
+### Tables.Joining.WithdrawTable:holding-nothing#3
+
+Authored path: `Tables.Joining.WithdrawTable`.
+- Covered by [Tables](../design/compositions/Tables.md), line 28.
+- Covered by [Tables](../design/compositions/Tables.md), line 36.
+
+```reaction
+when Inviting.withdraw (event: gathering, guest), asked by Tables.Joining.WithdrawTable:holding-nothing#2
+where
+  earlier, RequestBoundary.request (gathering, path: "/api/tables/withdraw", requestId, session)
+then
+  RequestBoundary.respond (requestId, withdrawn: true)
+```
+
+### Tables.Joining.WithdrawTable:seated#2
+
+Authored path: `Tables.Joining.WithdrawTable`.
+- Covered by [Tables](../design/compositions/Tables.md), line 28.
+- Covered by [Tables](../design/compositions/Tables.md), line 36.
+
+```reaction
+when Sessioning.current (now, session, subject: guest), asked by Tables.Joining.WithdrawTable
+where
+  earlier, RequestBoundary.request (gathering, path: "/api/tables/withdraw", requestId, session)
+  Reserving._getReservation (resource: gathering, user: guest) has (reservation)
+then
+  Reserving.cancel (reservation)
+```
+
+### Tables.Joining.WithdrawTable:seated#3
+
+Authored path: `Tables.Joining.WithdrawTable`.
+- Covered by [Tables](../design/compositions/Tables.md), line 28.
+- Covered by [Tables](../design/compositions/Tables.md), line 36.
+
+```reaction
+when Reserving.cancel (reservation), asked by Tables.Joining.WithdrawTable:seated#2
+where
+  earlier, Sessioning.current (now, session, subject: guest), asked by Tables.Joining.WithdrawTable
+  earlier, RequestBoundary.request (gathering, path: "/api/tables/withdraw", requestId, session)
+then
+  Inviting.withdraw (event: gathering, guest)
+```
+
+### Tables.Joining.WithdrawTable:seated#4
+
+Authored path: `Tables.Joining.WithdrawTable`.
+- Covered by [Tables](../design/compositions/Tables.md), line 28.
+- Covered by [Tables](../design/compositions/Tables.md), line 36.
+
+```reaction
+when Inviting.withdraw (event: gathering, guest), asked by Tables.Joining.WithdrawTable:seated#3
+where
+  earlier, RequestBoundary.request (gathering, path: "/api/tables/withdraw", requestId, session)
+then
+  RequestBoundary.respond (requestId, withdrawn: true)
+```
+
+### Tables.Joining.WithdrawTable:waitlist-locked#2
+
+Authored path: `Tables.Joining.WithdrawTable`.
+- Covered by [Tables](../design/compositions/Tables.md), line 28.
+- Covered by [Tables](../design/compositions/Tables.md), line 36.
+
+```reaction
+when Sessioning.current (now, session, subject: guest), asked by Tables.Joining.WithdrawTable
+where
+  earlier, RequestBoundary.request (gathering, path: "/api/tables/withdraw", requestId, session)
+  Reserving._getWaitlistPosition (resource: gathering, user: guest)
+  Reserving._getAvailability (resource: gathering) has (locked)
+  locked is among [true]
+then
+  RequestBoundary.respond (error: "TABLE_CLOSED", requestId)
+```
+
+### Tables.Joining.WithdrawTable:waitlisted#2
+
+Authored path: `Tables.Joining.WithdrawTable`.
+- Covered by [Tables](../design/compositions/Tables.md), line 28.
+- Covered by [Tables](../design/compositions/Tables.md), line 36.
+
+```reaction
+when Sessioning.current (now, session, subject: guest), asked by Tables.Joining.WithdrawTable
+where
+  earlier, RequestBoundary.request (gathering, path: "/api/tables/withdraw", requestId, session)
+  Reserving._getWaitlistPosition (resource: gathering, user: guest)
+  Reserving._getAvailability (resource: gathering) has (locked)
+  locked is among [false]
+then
+  Reserving.leaveWaitlist (resource: gathering, user: guest)
+```
+
+### Tables.Joining.WithdrawTable:waitlisted#3
+
+Authored path: `Tables.Joining.WithdrawTable`.
+- Covered by [Tables](../design/compositions/Tables.md), line 28.
+- Covered by [Tables](../design/compositions/Tables.md), line 36.
+
+```reaction
+when Reserving.leaveWaitlist (resource: gathering, user: guest), asked by Tables.Joining.WithdrawTable:waitlisted#2
+then
+  Inviting.withdraw (event: gathering, guest)
+```
+
+### Tables.Joining.WithdrawTable:waitlisted#4
+
+Authored path: `Tables.Joining.WithdrawTable`.
+- Covered by [Tables](../design/compositions/Tables.md), line 28.
+- Covered by [Tables](../design/compositions/Tables.md), line 36.
+
+```reaction
+when Inviting.withdraw (event: gathering, guest), asked by Tables.Joining.WithdrawTable:waitlisted#3
+where
+  earlier, RequestBoundary.request (gathering, path: "/api/tables/withdraw", requestId, session)
+then
+  RequestBoundary.respond (requestId, withdrawn: true)
+```
+
+### Tables.Sharing.CreateLink
+
+Authored path: `Tables.Sharing.CreateLink`.
+- Covered by [Tables](../design/compositions/Tables.md), line 42.
+- Covered by [Tables](../design/compositions/Tables.md), line 45.
+
+```reaction
+when RequestBoundary.request (gathering, label, path: "/api/links/create", requestId, session)
+where
+  now is now
+then
+  Sessioning.current (now, session)
+```
+
+### Tables.Sharing.CreateLink:is-host#2
+
+Authored path: `Tables.Sharing.CreateLink`.
+- Covered by [Tables](../design/compositions/Tables.md), line 42.
+- Covered by [Tables](../design/compositions/Tables.md), line 45.
+
+```reaction
+when Sessioning.current (now, session, subject: host), asked by Tables.Sharing.CreateLink
+where
+  earlier, RequestBoundary.request (gathering, label, path: "/api/links/create", requestId, session)
+  Hosting._getDetails (gathering) has (host)
+then
+  Linking.createLink (creator: host, label, now, target: gathering)
+```
+
+### Tables.Sharing.CreateLink:is-host#3
+
+Authored path: `Tables.Sharing.CreateLink`.
+- Covered by [Tables](../design/compositions/Tables.md), line 42.
+- Covered by [Tables](../design/compositions/Tables.md), line 45.
+
+```reaction
+when Linking.createLink (creator: host, label, now, target: gathering, link, token), asked by Tables.Sharing.CreateLink:is-host#2
+where
+  earlier, RequestBoundary.request (gathering, label, path: "/api/links/create", requestId, session)
+then
+  RequestBoundary.respond (link, requestId, token)
+```
+
+### Tables.Sharing.CreateLink:not-host#2
+
+Authored path: `Tables.Sharing.CreateLink`.
+- Covered by [Tables](../design/compositions/Tables.md), line 42.
+- Covered by [Tables](../design/compositions/Tables.md), line 45.
+
+```reaction
+when Sessioning.current (now, session, subject: host), asked by Tables.Sharing.CreateLink
+where
+  earlier, RequestBoundary.request (gathering, label, path: "/api/links/create", requestId, session)
+  no Hosting._getDetails (gathering) has (host)
+then
+  RequestBoundary.respond (error: "NOT_HOST", requestId)
+```
+
+### Tables.Sharing.ListLinks
+
+Authored path: `Tables.Sharing.ListLinks`.
+- Covered by [Tables](../design/compositions/Tables.md), line 42.
+- Covered by [Tables](../design/compositions/Tables.md), line 46.
+
+```reaction
+when RequestBoundary.request (gathering, path: "/api/links/list", requestId, session)
+where
+  now is now
+then
+  Sessioning.current (now, session)
+```
+
+### Tables.Sharing.ListLinks:is-host#2
+
+Authored path: `Tables.Sharing.ListLinks`.
+- Covered by [Tables](../design/compositions/Tables.md), line 42.
+- Covered by [Tables](../design/compositions/Tables.md), line 46.
+
+```reaction
+when Sessioning.current (now, session, subject: host), asked by Tables.Sharing.ListLinks
+where
+  earlier, RequestBoundary.request (gathering, path: "/api/links/list", requestId, session)
+  Hosting._getDetails (gathering) has (host)
+then
+  RequestBoundary.respond (requestId, shared: former "a table's links" with (gathering))
+```
+
+### Tables.Sharing.ListLinks:not-host#2
+
+Authored path: `Tables.Sharing.ListLinks`.
+- Covered by [Tables](../design/compositions/Tables.md), line 42.
+- Covered by [Tables](../design/compositions/Tables.md), line 46.
+
+```reaction
+when Sessioning.current (now, session, subject: host), asked by Tables.Sharing.ListLinks
+where
+  earlier, RequestBoundary.request (gathering, path: "/api/links/list", requestId, session)
+  no Hosting._getDetails (gathering) has (host)
+then
+  RequestBoundary.respond (error: "NOT_HOST", requestId)
+```
+
+### Tables.Sharing.RevokeLink
+
+Authored path: `Tables.Sharing.RevokeLink`.
+- Covered by [Tables](../design/compositions/Tables.md), line 42.
+- Covered by [Tables](../design/compositions/Tables.md), line 47.
+
+```reaction
+when RequestBoundary.request (link, path: "/api/links/revoke", requestId, session)
+where
+  now is now
+then
+  Sessioning.current (now, session)
+```
+
+### Tables.Sharing.RevokeLink#2
+
+Authored path: `Tables.Sharing.RevokeLink`.
+- Covered by [Tables](../design/compositions/Tables.md), line 42.
+- Covered by [Tables](../design/compositions/Tables.md), line 47.
+
+```reaction
+when Sessioning.current (now, session, subject: host), asked by Tables.Sharing.RevokeLink
+where
+  earlier, RequestBoundary.request (link, path: "/api/links/revoke", requestId, session)
+then
+  Linking.revokeLink (creator: host, link)
+```
+
+### Tables.Sharing.RevokeLink#3
+
+Authored path: `Tables.Sharing.RevokeLink`.
+- Covered by [Tables](../design/compositions/Tables.md), line 42.
+- Covered by [Tables](../design/compositions/Tables.md), line 47.
+
+```reaction
+when Linking.revokeLink (creator: host, link), asked by Tables.Sharing.RevokeLink#2
+where
+  earlier, RequestBoundary.request (link, path: "/api/links/revoke", requestId, session)
+then
+  RequestBoundary.respond (requestId, revoked: true)
+```
+
+### Tables.Viewing.ViewTable:link-active
+
+Authored path: `Tables.Viewing.ViewTable`.
+- Covered by [Tables](../design/compositions/Tables.md), line 18.
+- Covered by [Tables](../design/compositions/Tables.md), line 21.
+
+```reaction
+when RequestBoundary.request (path: "/api/tables/view", requestId, token)
+where
+  now is now
+  Linking._resolve (now, token) has (target: gathering)
+  Hosting._getDetails (gathering) has (area, confirmedVenue, cutoffTime, details, endTime, scope, startTime, status, title)
+  Reserving._getAvailability (resource: gathering) has (capacity, locked, remaining, reservedCount, waitlistCount)
+then
+  RequestBoundary.respond (area, capacity, confirmedVenue, cutoffTime, details, endTime, gathering, locked, remaining, requestId, reservedCount, scope, startTime, status, title, waitlistCount)
+```
+
+### Tables.Viewing.ViewTable:link-unknown
+
+Authored path: `Tables.Viewing.ViewTable`.
+- Covered by [Tables](../design/compositions/Tables.md), line 18.
+- Covered by [Tables](../design/compositions/Tables.md), line 21.
+
+```reaction
+when RequestBoundary.request (path: "/api/tables/view", requestId, token)
+where
+  now is now
+  no Linking._resolve (now, token)
+then
+  RequestBoundary.respond (error: "LINK_NOT_FOUND", requestId)
+```
+
 ## Endpoint input contracts
 
 Before recording an action ask, the boundary rejects a body that is not an
@@ -754,11 +1620,20 @@ object or lacks a required key. The response uses `INVALID_INPUT` and names
 the path or missing key. A declared default fills an absent key. Endpoints
 not listed here have no explicit input contract.
 
+- `/api/links/create` — requires `session`, `gathering`; fills `label` with null when absent
+- `/api/links/list` — requires `session`, `gathering`
+- `/api/links/revoke` — requires `session`, `link`
+- `/api/tables/accept` — requires `session`, `token`
+- `/api/tables/create` — requires `session`, `title`, `area`, `startTime`, `endTime`, `cutoffTime`, `capacity`; fills `confirmedVenue` with null when absent; fills `details` with null when absent; fills `linkLabel` with null when absent; fills `scope` with null when absent
+- `/api/tables/mine` — requires `session`
+- `/api/tables/place` — requires `session`, `gathering`
+- `/api/tables/view` — requires `token`
+- `/api/tables/withdraw` — requires `session`, `gathering`
 - `/auth/logout` — requires `session`
 - `/auth/me` — fills `session` with null when absent
 - `/auth/petrock/callback` — requires `code`, `state`
 - `/auth/petrock/start` — fills `returnTo` with null when absent
-- `/auth/test-login` — fills `returnTo` with null when absent
+- `/auth/test-login` — fills `account` with null when absent; fills `returnTo` with null when absent
 - `/gatherings/book` — requires `session`, `gathering`
 - `/gatherings/cancel` — requires `session`, `gathering`
 - `/gatherings/confirm` — requires `session`, `gathering`

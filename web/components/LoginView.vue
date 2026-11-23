@@ -5,7 +5,7 @@ import { authState, client, sanitizeRedirect, setStoredSession } from "../auth-c
 
 const route = useRoute();
 const router = useRouter();
-const busy = ref<"touchstone" | "test" | null>(null);
+const busy = ref<"touchstone" | "test" | "guest" | null>(null);
 const errorMessage = ref("");
 
 const returnTo = computed(() => sanitizeRedirect(route.query.redirect));
@@ -23,11 +23,11 @@ async function signInWithTouchstone() {
   window.location.assign(result.authorizationUrl);
 }
 
-async function signInAsTestAccount() {
+async function signInAsTestAccount(account: "student" | "guest" = "student") {
   if (busy.value) return;
-  busy.value = "test";
+  busy.value = account === "guest" ? "guest" : "test";
   errorMessage.value = "";
-  const result = await client.auth["test-login"]({ returnTo: returnTo.value });
+  const result = await client.auth["test-login"]({ returnTo: returnTo.value, account });
   if ("error" in result) {
     errorMessage.value =
       result.error === "FORBIDDEN"
@@ -64,9 +64,18 @@ async function signInAsTestAccount() {
       type="button"
       class="btn"
       :disabled="busy !== null"
-      @click="signInAsTestAccount"
+      @click="signInAsTestAccount('student')"
     >
       {{ busy === "test" ? "Signing in…" : "Login as Test Account" }}
+    </button>
+    <button
+      v-if="authState.testLoginEnabled"
+      type="button"
+      class="btn"
+      :disabled="busy !== null"
+      @click="signInAsTestAccount('guest')"
+    >
+      {{ busy === "guest" ? "Signing in…" : "Login as Test Guest (second account)" }}
     </button>
     <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
   </main>

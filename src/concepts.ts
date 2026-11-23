@@ -2,6 +2,8 @@ import { conceptSet, registerConcept } from "@mit-sdg/sync-engine/assembly";
 import type { Db } from "mongodb";
 import authenticatingSpec from "@design/concepts/Authenticating.md" with { type: "text" };
 import hostingSpec from "@design/concepts/Hosting.md" with { type: "text" };
+import invitingSpec from "@design/concepts/Inviting.md" with { type: "text" };
+import linkingSpec from "@design/concepts/Linking.md" with { type: "text" };
 import reservingSpec from "@design/concepts/Reserving.md" with { type: "text" };
 import sessioningSpec from "@design/concepts/Sessioning.md" with { type: "text" };
 import { buildPetrockAuthorizationUrl, type PetrockClient } from "./auth/petrock.ts";
@@ -23,6 +25,8 @@ import {
   InvalidSchedule,
   NotHost,
 } from "./concepts/Hosting.ts";
+import { AlreadyAccepted, InvalidPendingKey, InvitingConcept, NotAccepted } from "./concepts/Inviting.ts";
+import { InvalidExpiry, LinkingConcept, NotCreator } from "./concepts/Linking.ts";
 import {
   AlreadyInPool,
   AlreadyReserved,
@@ -47,6 +51,21 @@ function normalizeReturnToPath(raw?: string | null): string {
   if (/[\u0000-\u001f\u007f\\]/.test(trimmed)) return "/";
   return trimmed;
 }
+
+// demo accounts for /auth/test-login. "guest" lets one person act as a second user in another browser window
+const TEST_ACCOUNTS = {
+  student: { email: "test-student@mit.edu", name: "Test Student", affiliation: "student" },
+  guest: { email: "test-guest@mit.edu", name: "Test Guest", affiliation: "student" },
+} as const;
+
+/** The demo account by name; anything other than "guest" is the original test student. */
+function testAccountOf(account?: string | null) {
+  return account === "guest" ? TEST_ACCOUNTS.guest : TEST_ACCOUNTS.student;
+}
+
+// the most open seats one table can offer, besides the host's own
+const MAX_CAPACITY = 50;
+
 
 const authenticating = registerConcept({
   class: AuthenticatingConcept,
@@ -107,6 +126,27 @@ const reserving = registerConcept({
   floors: { mongo: ({ database }: MongoFloorContext, name: string) => new ReservingConcept(database, name) },
 });
 
+const linking = registerConcept({
+  class: LinkingConcept,
+  spec: linkingSpec,
+  refusals: {
+    INVALID_EXPIRY: InvalidExpiry,
+    NOT_CREATOR: NotCreator,
+  },
+  floors: { mongo: ({ database }: MongoFloorContext, name: string) => new LinkingConcept(database, name) },
+});
+
+const inviting = registerConcept({
+  class: InvitingConcept,
+  spec: invitingSpec,
+  refusals: {
+    ALREADY_ACCEPTED: AlreadyAccepted,
+    NOT_ACCEPTED: NotAccepted,
+    INVALID_PENDING_KEY: InvalidPendingKey,
+  },
+  floors: { mongo: ({ database }: MongoFloorContext, name: string) => new InvitingConcept(database, name) },
+});
+
 // each concept is registered above and listed here once
 export const applicationConceptSet = conceptSet(
   {
@@ -114,6 +154,8 @@ export const applicationConceptSet = conceptSet(
     Sessioning: sessioning,
     Hosting: hosting,
     Reserving: reserving,
+    Linking: linking,
+    Inviting: inviting,
   },
   {
     now: (_input: Record<string, never>) => new Date(),
@@ -125,10 +167,15 @@ export const applicationConceptSet = conceptSet(
     buildPetrockAuthUrl: ({ state }: { state: string }) => buildPetrockAuthorizationUrl(state),
     testLoginEnabled: (_input: Record<string, never>) =>
       process.env.ENABLE_TEST_LOGIN === "true" && process.env.NODE_ENV !== "production",
-    testAccountExternalId: (_input: Record<string, never>) => "test-student@mit.edu",
-    testAccountEmail: (_input: Record<string, never>) => "test-student@mit.edu",
-    testAccountName: (_input: Record<string, never>) => "Test Student",
-    testAccountAffiliation: (_input: Record<string, never>) => "student",
+    testAccountExternalId: ({ account }: { account?: string | null }) => testAccountOf(account).email,
+    testAccountEmail: ({ account }: { account?: string | null }) => testAccountOf(account).email,
+    testAccountName: ({ account }: { account?: string | null }) => testAccountOf(account).name,
+    testAccountAffiliation: ({ account }: { account?: string | null }) => testAccountOf(account).affiliation,
+    hasText: ({ value }: { value?: string | null }) => typeof value === "string" && value.trim().length > 0,
+    isValidCapacity: ({ capacity }: { capacity?: number | null }) =>
+      typeof capacity === "number" && Number.isInteger(capacity) && capacity >= 1 && capacity <= MAX_CAPACITY,
+    isAcceptingGuests: ({ status, locked, cutoffTime, now }: { status: string; locked: boolean; cutoffTime: Date; now: Date }) =>
+      (status === "OPEN" || status === "CONFIRMED") && !locked && now.getTime() <= new Date(cutoffTime).getTime(),
   },
 );
 

@@ -26,6 +26,44 @@ const table = ref<Table | null>(null);
 const loaded = ref(false);
 const errorMessage = ref("");
 
+interface LinkRow {
+  link: string;
+  token: string;
+  label?: string | null;
+  active: boolean;
+}
+const links = ref<LinkRow[]>([]);
+const newLabel = ref("");
+const copied = ref("");
+const shareUrl = (token: string) => `${window.location.origin}/t/${token}`;
+
+// guests reach a table only through a share link, so the host makes one per group chat and can turn any off
+async function loadLinks() {
+  const listed = await client.api.links.list({ session: getStoredSession() ?? "", gathering: tableId.value });
+  links.value = "error" in listed ? [] : (listed.shared.links as LinkRow[]);
+}
+
+async function addLink() {
+  const result = await client.api.links.create({ session: getStoredSession() ?? "", gathering: tableId.value, label: newLabel.value.trim() || null });
+  if ("error" in result) {
+    errorMessage.value = "Could not make a link.";
+    return;
+  }
+  newLabel.value = "";
+  await loadLinks();
+}
+
+async function revoke(link: string) {
+  const result = await client.api.links.revoke({ session: getStoredSession() ?? "", link });
+  if ("error" in result) errorMessage.value = "Could not turn off that link.";
+  await loadLinks();
+}
+
+async function copy(token: string) {
+  await navigator.clipboard.writeText(shareUrl(token));
+  copied.value = token;
+}
+
 const shown = (time: string) => new Date(time).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 
 // the party is the guests with a spot plus the host
@@ -55,7 +93,10 @@ async function load() {
   }
   loaded.value = true;
 }
-onMounted(load);
+onMounted(async () => {
+  await load();
+  if (table.value) await loadLinks();
+});
 
 async function act(action: "confirm" | "book" | "cancel") {
   const result = await client.gatherings[action]({ session: getStoredSession() ?? "", gathering: tableId.value });
@@ -102,9 +143,30 @@ async function signOut() {
       <button v-if="['OPEN', 'CONFIRMED', 'BOOKED'].includes(table.status)" type="button" class="btn" @click="act('cancel')">Cancel table</button>
       <p v-if="errorMessage" class="error" role="alert">{{ errorMessage }}</p>
     </section>
+
+    <section v-if="table" class="card stack">
+      <strong>Share links</strong>
+      <p v-if="links.length === 0" class="muted">Guests join through a link. Make one for each group chat you post in.</p>
+      <ul v-else class="list">
+        <li v-for="l in links" :key="l.link">
+          <div class="row">
+            <span>{{ l.label || "Unnamed link" }}<span v-if="!l.active" class="muted"> (turned off)</span></span>
+            <span v-if="l.active" class="actions">
+              <RouterLink class="link-btn" :to="`/t/${l.token}`">Open</RouterLink>
+              <button type="button" class="link-btn" @click="copy(l.token)">{{ copied === l.token ? "Copied" : "Copy" }}</button>
+              <button type="button" class="link-btn danger" @click="revoke(l.link)">Turn off</button>
+            </span>
+          </div>
+        </li>
+      </ul>
+      <form class="row" @submit.prevent="addLink">
+        <input v-model="newLabel" class="input" placeholder="Link name, e.g. Dorm group chat" />
+        <button type="submit" class="btn btn-small">Make link</button>
+      </form>
+    </section>
     <section v-else-if="loaded" class="card stack">
       <strong>No such table</strong>
-      <p class="muted">This table does not exist, or you are not its host. Guests will be able to open a table from its invitation link.</p>
+      <p class="muted">This table does not exist, or you are not its host. Guests open a table from its share link.</p>
     </section>
 
     <RouterLink class="btn" to="/">My tables</RouterLink>
