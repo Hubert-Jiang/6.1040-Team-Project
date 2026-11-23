@@ -1,0 +1,13 @@
+node_modules/
+web/dist/
+*.tsbuildinfo
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+
+# sync-engine run logs, kept locally
+.sync-engine/
+
+.gemini
