@@ -2,11 +2,11 @@ import "./styles/main.css";
 import { createApp } from "vue";
 import { createRouter, createWebHistory } from "vue-router";
 import App from "./App.vue";
-import { authState, refreshAuth, sanitizeRedirect } from "./auth-client.ts";
+import { authState, getStoredSession, refreshAuth, sanitizeRedirect } from "./auth-client.ts";
 import CallbackView from "./components/CallbackView.vue";
 import HomeView from "./components/HomeView.vue";
 import LoginView from "./components/LoginView.vue";
-import CreateTableView from "./components/CreateTableView.vue";
+import InviteView from "./components/InviteView.vue";
 import TableView from "./components/TableView.vue";
 
 const router = createRouter({
@@ -15,8 +15,8 @@ const router = createRouter({
     { path: "/login", component: LoginView },
     { path: "/auth/petrock/callback", component: CallbackView },
     // the table page opens from a share link and works without signing in
-    { path: "/t/:token", component: TableView },
-    { path: "/new", component: CreateTableView, meta: { requiresAuth: true } },
+    { path: "/t/:token", component: InviteView },
+    { path: "/tables/:id", component: TableView, meta: { requiresAuth: true } },
     { path: "/", component: HomeView, meta: { requiresAuth: true } },
     { path: "/:pathMatch(.*)*", redirect: "/" },
   ],
@@ -27,7 +27,8 @@ router.beforeEach(async (to) => {
     return true;
   }
 
-  const user = authState.checked ? authState.user : await refreshAuth();
+  const needsCheck = !authState.checked || Boolean(to.meta.requiresAuth) || Boolean(getStoredSession());
+  const user = needsCheck ? await refreshAuth() : authState.user;
 
   if (to.meta.requiresAuth && !user) {
     return {

@@ -66,11 +66,6 @@ function testAccountOf(account?: string | null) {
 // the most open seats one table can offer, besides the host's own
 const MAX_CAPACITY = 50;
 
-/** Reads an ISO 8601 time from a request. Anything else becomes an invalid date, which Hosting refuses as INVALID_SCHEDULE. */
-function parseTimeValue(raw?: string | null): Date {
-  if (typeof raw !== "string" || !raw.trim()) return new Date(Number.NaN);
-  return new Date(raw.trim());
-}
 
 const authenticating = registerConcept({
   class: AuthenticatingConcept,
@@ -164,16 +159,18 @@ export const applicationConceptSet = conceptSet(
   },
   {
     now: (_input: Record<string, never>) => new Date(),
+    parseTime: ({ raw }: { raw: string }) => new Date(raw),
     sessionLifetimeMs: (_input: Record<string, never>) => SESSION_LIFETIME_MS,
     hasSession: ({ session }: { session?: string | null }) =>
       typeof session === "string" && session.trim().length > 0,
     normalizeReturnTo: ({ raw }: { raw?: string | null }) => normalizeReturnToPath(raw),
     buildPetrockAuthUrl: ({ state }: { state: string }) => buildPetrockAuthorizationUrl(state),
+    testLoginEnabled: (_input: Record<string, never>) =>
+      process.env.ENABLE_TEST_LOGIN === "true" && process.env.NODE_ENV !== "production",
     testAccountExternalId: ({ account }: { account?: string | null }) => testAccountOf(account).email,
     testAccountEmail: ({ account }: { account?: string | null }) => testAccountOf(account).email,
     testAccountName: ({ account }: { account?: string | null }) => testAccountOf(account).name,
     testAccountAffiliation: ({ account }: { account?: string | null }) => testAccountOf(account).affiliation,
-    parseTime: ({ raw }: { raw?: string | null }) => parseTimeValue(raw),
     hasText: ({ value }: { value?: string | null }) => typeof value === "string" && value.trim().length > 0,
     isValidCapacity: ({ capacity }: { capacity?: number | null }) =>
       typeof capacity === "number" && Number.isInteger(capacity) && capacity >= 1 && capacity <= MAX_CAPACITY,

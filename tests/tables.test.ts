@@ -17,6 +17,9 @@ let database: Db;
 
 // starting the in-memory MongoDB can take a few seconds on the first test
 beforeEach(async () => {
+  // these tests sign in through test-login, which only runs when switched on outside production
+  process.env.ENABLE_TEST_LOGIN = "true";
+  process.env.NODE_ENV = "test";
   server?.stop(true);
   database = await testDatabase();
   server = startHost({ hostname: "127.0.0.1", port: 0, database });
@@ -161,10 +164,10 @@ test("only the host can add, list, or revoke a table's links", async () => {
   const created = await createTable(noah.session);
   const alice = await signIn("alice@mit.edu");
 
-  expect(await client.api.links.create({ session: alice.session, gathering: created.gathering, label: "Sneaky" })).toEqual({ error: "FORBIDDEN" });
-  expect(await client.api.links.list({ session: alice.session, gathering: created.gathering })).toEqual({ error: "FORBIDDEN" });
+  expect(await client.api.links.create({ session: alice.session, gathering: created.gathering, label: "Sneaky" })).toEqual({ error: "NOT_FOUND" });
+  expect(await client.api.links.list({ session: alice.session, gathering: created.gathering })).toEqual({ error: "NOT_FOUND" });
   expect(await client.api.links.revoke({ session: alice.session, link: created.link })).toEqual({ error: "FORBIDDEN" });
-  expect(await client.api.links.create({ session: noah.session, gathering: "no-such-table" })).toEqual({ error: "FORBIDDEN" });
+  expect(await client.api.links.create({ session: noah.session, gathering: "no-such-table" })).toEqual({ error: "NOT_FOUND" });
 
   // the refused revoke left the link working
   expect("error" in (await client.api.tables.view({ token: created.token }))).toBe(false);

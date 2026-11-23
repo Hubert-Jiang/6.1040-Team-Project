@@ -1,123 +1,52 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { authState, client, getStoredSession, logoutCurrentSession, refreshAuth } from "../auth-client.ts";
+import { openTableUrl } from "../../src/venues/opentable.ts";
+import { authState, client, getStoredSession, logoutCurrentSession, setStoredSession } from "../auth-client.ts";
 
-interface TableDetails {
-  gathering: string;
+interface Table {
   title: string;
   status: string;
+  area: string;
   startTime: string;
   endTime: string;
   cutoffTime: string;
-  details?: string | null;
-  scope?: string | null;
-  area: string;
-  confirmedVenue?: string | null;
+  details?: string;
+  confirmedVenue?: string;
   capacity: number;
   reservedCount: number;
-  remaining: number;
   waitlistCount: number;
   locked: boolean;
 }
+
+const route = useRoute();
+const router = useRouter();
+const tableId = computed(() => String(route.params.id ?? ""));
+const table = ref<Table | null>(null);
+const loaded = ref(false);
+const errorMessage = ref("");
+
 interface LinkRow {
   link: string;
   token: string;
   label?: string | null;
   active: boolean;
 }
-
-const route = useRoute();
-const router = useRouter();
-const token = computed(() => String(route.params.token ?? ""));
-
-const table = ref<TableDetails | null>(null);
-const notFound = ref(false);
-const hosting = ref(false);
-const place = ref<{ reservation: string | null; position: number | null } | null>(null);
 const links = ref<LinkRow[]>([]);
 const newLabel = ref("");
-const busy = ref(false);
-const message = ref("");
-const errorMessage = ref("");
+const copied = ref("");
+const shareUrl = (token: string) => `${window.location.origin}/t/${token}`;
 
-const session = () => getStoredSession() ?? "";
-const signedIn = computed(() => authState.user !== null);
-const seated = computed(() => Boolean(place.value?.reservation));
-const waitlisted = computed(() => place.value?.position != null);
-const shareUrl = (t: string) => `${window.location.origin}/t/${t}`;
-const when = (iso: string) =>
-  new Date(iso).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-
-async function loadTable() {
-  const view = await client.api.tables.view({ token: token.value });
-  if ("error" in view) {
-    notFound.value = true;
-    table.value = null;
-    return;
-  }
-  table.value = { ...view, startTime: String(view.startTime), endTime: String(view.endTime), cutoffTime: String(view.cutoffTime) } as TableDetails;
-}
-
-async function loadMine() {
-  if (!table.value || !signedIn.value) return;
-  const mine = await client.api.tables.place({ session: session(), gathering: table.value.gathering });
-  if ("error" in mine) return;
-  hosting.value = mine.hosting;
-  place.value = { reservation: mine.place.reservation ?? null, position: mine.place.position ?? null };
-  if (hosting.value) await loadLinks();
-}
-
+// guests reach a table only through a share link, so the host makes one per group chat and can turn any off
 async function loadLinks() {
-  if (!table.value) return;
-  const listed = await client.api.links.list({ session: session(), gathering: table.value.gathering });
-  if (!("error" in listed)) links.value = listed.shared.links as LinkRow[];
-}
-
-const ACCEPT_ERRORS: Record<string, string> = {
-  CONFLICT: "You can't join right now: you already joined, you're the host, or the table is closed.",
-  FORBIDDEN: "This table is only open to people with a matching email domain.",
-  NOT_FOUND: "This link no longer works.",
-  UNAUTHORIZED: "Your session ended. Sign in again.",
-};
-
-async function accept() {
-  if (!signedIn.value) {
-    // login keeps this path, so the accept finishes when the guest lands back here
-    await router.push({ path: "/login", query: { redirect: `/t/${token.value}?accept=1` } });
-    return;
-  }
-  busy.value = true;
-  errorMessage.value = "";
-  const result = await client.api.tables.accept({ session: session(), token: token.value });
-  busy.value = false;
-  if ("error" in result) {
-    errorMessage.value = ACCEPT_ERRORS[result.error] ?? `Could not accept (${result.error}).`;
-    return;
-  }
-  await Promise.all([loadTable(), loadMine()]);
-}
-
-async function withdraw() {
-  if (!table.value) return;
-  busy.value = true;
-  errorMessage.value = "";
-  const result = await client.api.tables.withdraw({ session: session(), gathering: table.value.gathering });
-  busy.value = false;
-  if ("error" in result) {
-    errorMessage.value = result.error === "CONFLICT" ? "Seats are locked, so you can no longer withdraw." : `Could not withdraw (${result.error}).`;
-    return;
-  }
-  message.value = "You withdrew. You can accept again while the table is open.";
-  await Promise.all([loadTable(), loadMine()]);
+  const listed = await client.api.links.list({ session: getStoredSession() ?? "", gathering: tableId.value });
+  links.value = "error" in listed ? [] : (listed.shared.links as LinkRow[]);
 }
 
 async function addLink() {
-  if (!table.value) return;
-  const label = newLabel.value.trim() || null;
-  const result = await client.api.links.create({ session: session(), gathering: table.value.gathering, label });
+  const result = await client.api.links.create({ session: getStoredSession() ?? "", gathering: tableId.value, label: newLabel.value.trim() || null });
   if ("error" in result) {
-    errorMessage.value = `Could not add a link (${result.error}).`;
+    errorMessage.value = "Could not make a link.";
     return;
   }
   newLabel.value = "";
@@ -125,115 +54,122 @@ async function addLink() {
 }
 
 async function revoke(link: string) {
-  const result = await client.api.links.revoke({ session: session(), link });
-  if ("error" in result) {
-    errorMessage.value = `Could not revoke the link (${result.error}).`;
-    return;
-  }
+  const result = await client.api.links.revoke({ session: getStoredSession() ?? "", link });
+  if ("error" in result) errorMessage.value = "Could not turn off that link.";
   await loadLinks();
-  // revoking the link this page was opened with makes the page itself stop resolving
-  await loadTable();
 }
 
-async function copy(t: string) {
-  await navigator.clipboard.writeText(shareUrl(t));
-  message.value = "Link copied.";
+async function copy(token: string) {
+  await navigator.clipboard.writeText(shareUrl(token));
+  copied.value = token;
+}
+
+const shown = (time: string) => new Date(time).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+
+// the party is the guests with a spot plus the host
+const bookingUrl = computed(() =>
+  table.value?.confirmedVenue
+    ? openTableUrl({ venue: table.value.confirmedVenue, partySize: table.value.reservedCount + 1, time: new Date(table.value.startTime) })
+    : "",
+);
+
+async function handleUnauthorized() {
+  setStoredSession(null);
+  authState.user = null;
+  authState.checked = true;
+  await router.replace({ path: "/login", query: { redirect: route.fullPath } });
+}
+
+async function load() {
+  const result = await client.gatherings.view({ session: getStoredSession() ?? "", gathering: tableId.value });
+  if ("error" in result) {
+    if (result.error === "UNAUTHORIZED") {
+      await handleUnauthorized();
+      return;
+    }
+    table.value = null;
+  } else {
+    table.value = result;
+  }
+  loaded.value = true;
+}
+onMounted(async () => {
+  await load();
+  if (table.value) await loadLinks();
+});
+
+async function act(action: "confirm" | "book" | "cancel") {
+  const result = await client.gatherings[action]({ session: getStoredSession() ?? "", gathering: tableId.value });
+  if ("error" in result) {
+    if (result.error === "UNAUTHORIZED") {
+      await handleUnauthorized();
+      return;
+    }
+    errorMessage.value = "That did not go through. The table may have passed its cutoff or changed since this page loaded.";
+  } else {
+    errorMessage.value = "";
+  }
+  await load();
 }
 
 async function signOut() {
   await logoutCurrentSession();
-  hosting.value = false;
-  place.value = null;
-  links.value = [];
-  message.value = "";
-  errorMessage.value = "";
+  await router.replace({ path: "/login", query: { redirect: route.fullPath } });
 }
-
-onMounted(async () => {
-  if (!authState.checked) await refreshAuth();
-  await loadTable();
-  await loadMine();
-  if (route.query.accept === "1") {
-    await router.replace({ path: route.path });
-    if (table.value && signedIn.value && hosting.value) {
-      errorMessage.value = `You signed in as ${authState.user?.email}, the host of this table, so nothing was accepted. Sign out and sign in with the other test account to accept as a guest.`;
-    } else if (table.value && signedIn.value && !seated.value && !waitlisted.value) await accept();
-  }
-});
 </script>
 
 <template>
-  <main class="shell card stack">
-    <RouterLink v-if="signedIn" to="/" class="muted">← Your tables</RouterLink>
-
-    <template v-if="notFound">
-      <strong>This link doesn't work</strong>
-      <p class="muted">It may have been turned off by the host, or mistyped.</p>
-    </template>
-
-    <template v-else-if="table">
-      <div>
-        <strong class="title">{{ table.title }}</strong>
-        <div class="muted">{{ table.area }}<template v-if="table.confirmedVenue"> · {{ table.confirmedVenue }}</template></div>
-      </div>
+  <main class="shell stack">
+    <section v-if="table" class="card stack">
+      <strong>{{ table.title }}</strong>
       <div class="muted">
-        <div>{{ when(table.startTime) }} to {{ when(table.endTime) }}</div>
-        <div>RSVP by {{ when(table.cutoffTime) }}</div>
-        <div v-if="table.scope">Only for @{{ table.scope }} emails</div>
+        <div>{{ table.status }}</div>
+        <div>Event from {{ shown(table.startTime) }} to {{ shown(table.endTime) }}</div>
+        <div>RSVPs close {{ shown(table.cutoffTime) }}</div>
+        <div>{{ table.confirmedVenue ? `${table.confirmedVenue}, ${table.area}` : table.area }}</div>
+        <div v-if="table.details">{{ table.details }}</div>
       </div>
-      <p v-if="table.details">{{ table.details }}</p>
-
-      <div class="seats">
-        <strong>{{ table.remaining }} of {{ table.capacity }} seats left</strong>
-        <span v-if="table.waitlistCount" class="muted"> · {{ table.waitlistCount }} on the waitlist</span>
-        <div v-if="table.status !== 'OPEN' && table.status !== 'CONFIRMED'" class="muted">This table is {{ table.status.toLowerCase() }}.</div>
-        <div v-else-if="table.locked" class="muted">Seats are locked.</div>
+      <div>
+        {{ table.reservedCount }} of {{ table.capacity }} guest spots taken<span v-if="table.waitlistCount">, {{ table.waitlistCount }} waiting</span><span v-if="table.locked">, locked</span>
       </div>
 
-      <template v-if="hosting">
-        <p class="muted">You're hosting this table, so you can't take a seat here. To try it as a guest, open the link in a private window and sign in with the other test account.</p>
-        <strong>Share links</strong>
-        <ul class="list">
-          <li v-for="l in links" :key="l.link">
-            <div class="row">
-              <span>{{ l.label || "Unnamed link" }}<span v-if="!l.active" class="muted"> (turned off)</span></span>
-              <span v-if="l.active" class="actions">
-                <button type="button" class="link-btn" @click="copy(l.token)">Copy</button>
-                <button type="button" class="link-btn danger" @click="revoke(l.link)">Turn off</button>
-              </span>
-            </div>
-          </li>
-        </ul>
-        <form class="row" @submit.prevent="addLink">
-          <input v-model="newLabel" class="input" placeholder="New link name, e.g. Club chat" />
-          <button type="submit" class="btn btn-small">Add</button>
-        </form>
-      </template>
+      <button v-if="table.status === 'OPEN'" type="button" class="btn btn-primary" @click="act('confirm')">Confirm table</button>
+      <a v-if="bookingUrl && table.status === 'CONFIRMED'" class="btn" :href="bookingUrl" target="_blank" rel="noopener">
+        Find {{ table.confirmedVenue }} on OpenTable for {{ table.reservedCount + 1 }}
+      </a>
+      <button v-if="table.status === 'CONFIRMED' && table.confirmedVenue" type="button" class="btn btn-primary" @click="act('book')">
+        Mark as booked
+      </button>
+      <button v-if="['OPEN', 'CONFIRMED', 'BOOKED'].includes(table.status)" type="button" class="btn" @click="act('cancel')">Cancel table</button>
+      <p v-if="errorMessage" class="error" role="alert">{{ errorMessage }}</p>
+    </section>
 
-      <template v-else-if="seated">
-        <p><strong>You have a seat.</strong></p>
-        <button type="button" class="btn" :disabled="busy" @click="withdraw">Withdraw</button>
-      </template>
+    <section v-if="table" class="card stack">
+      <strong>Share links</strong>
+      <p v-if="links.length === 0" class="muted">Guests join through a link. Make one for each group chat you post in.</p>
+      <ul v-else class="list">
+        <li v-for="l in links" :key="l.link">
+          <div class="row">
+            <span>{{ l.label || "Unnamed link" }}<span v-if="!l.active" class="muted"> (turned off)</span></span>
+            <span v-if="l.active" class="actions">
+              <RouterLink class="link-btn" :to="`/t/${l.token}`">Open</RouterLink>
+              <button type="button" class="link-btn" @click="copy(l.token)">{{ copied === l.token ? "Copied" : "Copy" }}</button>
+              <button type="button" class="link-btn danger" @click="revoke(l.link)">Turn off</button>
+            </span>
+          </div>
+        </li>
+      </ul>
+      <form class="row" @submit.prevent="addLink">
+        <input v-model="newLabel" class="input" placeholder="Link name, e.g. Dorm group chat" />
+        <button type="submit" class="btn btn-small">Make link</button>
+      </form>
+    </section>
+    <section v-else-if="loaded" class="card stack">
+      <strong>No such table</strong>
+      <p class="muted">This table does not exist, or you are not its host. Guests open a table from its share link.</p>
+    </section>
 
-      <template v-else-if="waitlisted">
-        <p><strong>You're #{{ place?.position }} on the waitlist.</strong> You'll get the next seat that frees up.</p>
-        <button type="button" class="btn" :disabled="busy" @click="withdraw">Leave the waitlist</button>
-      </template>
-
-      <template v-else>
-        <button type="button" class="btn btn-primary" :disabled="busy" @click="accept">
-          {{ signedIn ? (table.remaining > 0 ? "Accept a seat" : "Join the waitlist") : "Accept (you'll sign in first)" }}
-        </button>
-      </template>
-
-      <p v-if="message" class="muted">{{ message }}</p>
-      <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
-      <p v-if="signedIn && authState.user" class="muted small">
-        Signed in as {{ authState.user.email }} ·
-        <button type="button" class="link-btn" @click="signOut">Sign out</button>
-      </p>
-    </template>
-
-    <p v-else class="muted">Loading…</p>
+    <RouterLink class="btn" to="/">My tables</RouterLink>
+    <button type="button" class="btn" @click="signOut">Sign out</button>
   </main>
 </template>

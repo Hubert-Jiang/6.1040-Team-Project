@@ -12,6 +12,7 @@ export default {
       new URL("./design/types.md", import.meta.url),
       new URL("./design/compositions/Auth.md", import.meta.url),
       new URL("./design/compositions/Tables.md", import.meta.url),
+      new URL("./design/compositions/Gatherings.md", import.meta.url),
     ],
   },
   projections: [httpWire({ policy: appHttpPolicy, name: "AppWireHttp" })],

@@ -20,9 +20,11 @@ export const client: Client<AppWireHttp, HttpClientError> = createHttpClient<App
 export const authState = reactive<{
   checked: boolean;
   user: AuthUser | null;
+  testLoginEnabled: boolean;
 }>({
   checked: false,
   user: null,
+  testLoginEnabled: false,
 });
 
 export function getStoredSession(): string | null {
@@ -53,7 +55,14 @@ export async function refreshAuth(): Promise<AuthUser | null> {
   const session = getStoredSession();
   const result = await client.auth.me(session ? { session } : {});
   authState.checked = true;
-  if ("error" in result || !result.authenticated) {
+  if ("error" in result) {
+    authState.user = null;
+    authState.testLoginEnabled = false;
+    if (session) setStoredSession(null);
+    return null;
+  }
+  authState.testLoginEnabled = result.testLoginEnabled;
+  if (!result.authenticated) {
     authState.user = null;
     if (session) setStoredSession(null);
     return null;

@@ -48,9 +48,6 @@ Tables.Sharing.RevokeLink at /api/links/revoke
 ```
 
 ```computations
-parseTime(raw?: String) : DateTime
-  Reads an ISO 8601 time; a missing or unreadable value becomes an invalid date.
-
 hasText(value?: String) : Flag
   Returns true when an optional string is supplied and not blank, otherwise false.
 

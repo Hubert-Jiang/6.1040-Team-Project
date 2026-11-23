@@ -86,6 +86,7 @@ const TestLogin = endpoint(
   ({
     returnTo,
     account,
+    enabled,
     now,
     lifetime,
     safeReturnTo,
@@ -103,6 +104,8 @@ const TestLogin = endpoint(
     receive({ returnTo, account })
       .then(
         where(
+          compute(computations.testLoginEnabled, {}, enabled),
+          is.among(enabled, [true]),
           compute(computations.now, {}, now),
           compute(computations.sessionLifetimeMs, {}, lifetime),
           compute(computations.normalizeReturnTo, { raw: returnTo }, safeReturnTo),
@@ -145,38 +148,52 @@ const TestLogin = endpoint(
   { input: { defaults: { returnTo: null, account: null } } },
 );
 
+const TestLoginDisabled = endpoint("/auth/test-login", ({ returnTo, enabled }) =>
+  receive({ returnTo }).then(
+    where(compute(computations.testLoginEnabled, {}, enabled), is.among(enabled, [false]))
+      .then(respond({ error: "TEST_LOGIN_DISABLED" })),
+  ),
+);
+
 const Me = endpoint(
   "/auth/me",
-  ({ session, sessionPresent, now, user, email, domain, name, affiliation }) =>
+  ({ session, sessionPresent, testLoginEnabled, now, user, email, domain, name, affiliation }) =>
     receive({ session }).then(
-      where(compute(computations.hasSession, { session }, sessionPresent), is.among(sessionPresent, [false]))
-        .then(respond({ authenticated: false }))
+      where(
+        compute(computations.hasSession, { session }, sessionPresent),
+        is.among(sessionPresent, [false]),
+        compute(computations.testLoginEnabled, {}, testLoginEnabled),
+      )
+        .then(respond({ authenticated: false, testLoginEnabled }))
         .named("session-missing"),
       where(
         compute(computations.hasSession, { session }, sessionPresent),
         is.among(sessionPresent, [true]),
+        compute(computations.testLoginEnabled, {}, testLoginEnabled),
         compute(computations.now, {}, now),
         no(concepts.Sessioning._active({ session, now })),
       )
-        .then(respond({ authenticated: false }))
+        .then(respond({ authenticated: false, testLoginEnabled }))
         .named("session-inactive"),
       where(
         compute(computations.hasSession, { session }, sessionPresent),
         is.among(sessionPresent, [true]),
+        compute(computations.testLoginEnabled, {}, testLoginEnabled),
         compute(computations.now, {}, now),
         concepts.Sessioning._active({ session, now }).is({ subject: user }),
         no(concepts.Authenticating._getUser({ user })),
       )
-        .then(respond({ authenticated: false }))
+        .then(respond({ authenticated: false, testLoginEnabled }))
         .named("user-missing"),
       where(
         compute(computations.hasSession, { session }, sessionPresent),
         is.among(sessionPresent, [true]),
+        compute(computations.testLoginEnabled, {}, testLoginEnabled),
         compute(computations.now, {}, now),
         concepts.Sessioning._active({ session, now }).is({ subject: user }),
         concepts.Authenticating._getUser({ user }).is({ email, domain, name, affiliation }),
       )
-        .then(respond({ authenticated: true, user, email, domain, name, affiliation }))
+        .then(respond({ authenticated: true, user, email, domain, name, affiliation, testLoginEnabled }))
         .named("authenticated"),
     ),
   { input: { defaults: { session: null } } },
@@ -193,6 +210,6 @@ const Logout = endpoint(
 
 export const authComposition = {
   Petrock: { Start, Callback },
-  Demo: { TestLogin },
+  Demo: { TestLogin, TestLoginDisabled },
   Session: { Me, Logout },
 };

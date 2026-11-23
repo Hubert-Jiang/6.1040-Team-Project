@@ -8,18 +8,23 @@ export const appHttpPolicy = httpPolicy({
     INVALID_RETURN_TO: "INVALID_REQUEST",
     INVALID_STATE: "INVALID_REQUEST",
     OIDC_EXCHANGE_FAILED: "UNAUTHORIZED",
+    TEST_LOGIN_DISABLED: "FORBIDDEN",
     UNKNOWN_SESSION: "UNAUTHORIZED",
-    // creating a table
-    INVALID_DETAILS: "INVALID_REQUEST",
+    // creating and managing a table
+    HOST_LIMIT_REACHED: "CONFLICT",
     INVALID_SCHEDULE: "INVALID_REQUEST",
+    INVALID_DETAILS: "INVALID_REQUEST",
     INVALID_CAPACITY: "INVALID_REQUEST",
     INVALID_POOL: "INVALID_REQUEST",
-    HOST_LIMIT_REACHED: "CONFLICT",
     SCOPE_MISMATCH: "FORBIDDEN",
+    // a table that does not exist and one hosted by someone else look the same from outside
+    NO_SUCH_TABLE: "NOT_FOUND",
+    NOT_HOST: "NOT_FOUND",
+    CANNOT_CONFIRM: "CONFLICT",
+    CANNOT_BOOK: "CONFLICT",
     // viewing and sharing links
     LINK_NOT_FOUND: "NOT_FOUND",
     INVALID_EXPIRY: "INVALID_REQUEST",
-    NOT_HOST: "FORBIDDEN",
     NOT_CREATOR: "FORBIDDEN",
     // accepting and withdrawing
     OWN_TABLE: "CONFLICT",

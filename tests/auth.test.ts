@@ -8,8 +8,12 @@ import { testDatabase } from "./support/mongo.ts";
 
 let server: ReturnType<typeof startHost> | undefined;
 let client: Client<AppWireHttp, HttpClientError>;
+const originalEnableTestLogin = process.env.ENABLE_TEST_LOGIN;
+const originalNodeEnv = process.env.NODE_ENV;
 
 beforeEach(async () => {
+  process.env.ENABLE_TEST_LOGIN = "true";
+  process.env.NODE_ENV = "test";
   server?.stop(true);
   const database = await testDatabase();
   const mockPetrock: PetrockClient = {
@@ -33,11 +37,15 @@ beforeEach(async () => {
 
 afterAll(() => {
   server?.stop(true);
+  if (originalEnableTestLogin === undefined) delete process.env.ENABLE_TEST_LOGIN;
+  else process.env.ENABLE_TEST_LOGIN = originalEnableTestLogin;
+  if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
+  else process.env.NODE_ENV = originalNodeEnv;
 });
 
 test("test-login authenticates demo user, preserves relative returnTo, and supports /auth/me + /auth/logout", async () => {
   const before = await client.auth.me({});
-  expect(before).toEqual({ authenticated: false });
+  expect(before).toEqual({ authenticated: false, testLoginEnabled: true });
 
   const login = await client.auth["test-login"]({ returnTo: "/tables/xyz" });
   expect("error" in login).toBe(false);
@@ -57,13 +65,14 @@ test("test-login authenticates demo user, preserves relative returnTo, and suppo
     domain: "mit.edu",
     name: "Test Student",
     affiliation: "student",
+    testLoginEnabled: true,
   });
 
   const logout = await client.auth.logout({ session: login.session });
   expect(logout).toEqual({ ended: true });
 
   const after = await client.auth.me({ session: login.session });
-  expect(after).toEqual({ authenticated: false });
+  expect(after).toEqual({ authenticated: false, testLoginEnabled: true });
 
   const repeatLogout = await client.auth.logout({ session: login.session });
   expect(repeatLogout).toEqual({ error: "UNAUTHORIZED" });
@@ -107,6 +116,7 @@ test("petrock OIDC start + callback authenticates MIT user, preserves returnTo, 
     domain: "mit.edu",
     name: "Ben Bitdiddle",
     affiliation: "student",
+    testLoginEnabled: true,
   });
 
   // Replay of the same state is refused
@@ -132,4 +142,17 @@ test("host serves built Vue SPA HTML on GET /tables/xyz and /auth/petrock/callba
   expect(res.status).toBe(200);
   const html = await res.text();
   expect(html).toContain('<div id="app"></div>');
+});
+
+test("test-login is refused unless ENABLE_TEST_LOGIN=true outside production", async () => {
+  delete process.env.ENABLE_TEST_LOGIN;
+  expect(await client.auth["test-login"]({})).toEqual({ error: "FORBIDDEN" });
+
+  process.env.ENABLE_TEST_LOGIN = "false";
+  expect(await client.auth["test-login"]({})).toEqual({ error: "FORBIDDEN" });
+
+  process.env.ENABLE_TEST_LOGIN = "true";
+  process.env.NODE_ENV = "production";
+  expect(await client.auth["test-login"]({})).toEqual({ error: "FORBIDDEN" });
+  expect(await client.auth.me({})).toEqual({ authenticated: false, testLoginEnabled: false });
 });

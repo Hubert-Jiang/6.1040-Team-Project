@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import type { Collection, Db } from "mongodb";
 
 export class InvalidSessionLifetime extends Error {}
@@ -10,12 +10,27 @@ interface SessionDoc {
   expiresAt: Date;
 }
 
+function hashSessionToken(session: string): string {
+  return createHash("sha256").update(session).digest("hex");
+}
+
 /** Issues, validates, and ends opaque expiring sessions for external subjects. */
 export class SessioningConcept {
   readonly #sessions: Collection<SessionDoc>;
+  #indexes: Promise<unknown> | undefined;
 
   constructor(database: Db, name = "Sessioning") {
     this.#sessions = database.collection(`${name.toLowerCase()}.sessions`);
+  }
+
+  #ready() {
+    this.#indexes ??= this.#sessions
+      .createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
+      .catch((error: unknown) => {
+        this.#indexes = undefined;
+        throw error;
+      });
+    return this.#indexes;
   }
 
   async start({
@@ -30,9 +45,10 @@ export class SessioningConcept {
     if (!Number.isFinite(lifetime) || lifetime <= 0) {
       throw new InvalidSessionLifetime("A session lifetime must be a positive number of milliseconds.");
     }
+    await this.#ready();
     const session = randomBytes(24).toString("base64url");
     const expiresAt = new Date(now.getTime() + lifetime);
-    await this.#sessions.insertOne({ _id: session, subject, expiresAt });
+    await this.#sessions.insertOne({ _id: hashSessionToken(session), subject, expiresAt });
     return { session, expiresAt };
   }
 
@@ -40,7 +56,8 @@ export class SessioningConcept {
     if (!session) {
       throw new UnknownSession("This session is not active.");
     }
-    const doc = await this.#sessions.findOne({ _id: session, expiresAt: { $gt: now } });
+    await this.#ready();
+    const doc = await this.#sessions.findOne({ _id: hashSessionToken(session), expiresAt: { $gt: now } });
     if (!doc) {
       throw new UnknownSession("This session is not active.");
     }
@@ -51,7 +68,11 @@ export class SessioningConcept {
     if (!session) {
       throw new UnknownSession("This session is not active.");
     }
-    const deleted = await this.#sessions.findOneAndDelete({ _id: session, expiresAt: { $gt: now } });
+    await this.#ready();
+    const deleted = await this.#sessions.findOneAndDelete({
+      _id: hashSessionToken(session),
+      expiresAt: { $gt: now },
+    });
     if (!deleted) {
       throw new UnknownSession("This session is not active.");
     }
@@ -66,7 +87,8 @@ export class SessioningConcept {
     now: Date;
   }): Promise<Array<{ subject: string; expiresAt: Date }>> {
     if (!session) return [];
-    const doc = await this.#sessions.findOne({ _id: session, expiresAt: { $gt: now } });
+    await this.#ready();
+    const doc = await this.#sessions.findOne({ _id: hashSessionToken(session), expiresAt: { $gt: now } });
     return doc ? [{ subject: doc.subject, expiresAt: doc.expiresAt }] : [];
   }
 }

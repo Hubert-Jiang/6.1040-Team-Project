@@ -1,69 +1,101 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
-import { useRouter } from "vue-router";
-import { authState, client, getStoredSession, logoutCurrentSession } from "../auth-client.ts";
+import { onMounted, reactive, ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { authState, client, getStoredSession, logoutCurrentSession, setStoredSession } from "../auth-client.ts";
 
-interface HostedRow {
-  gathering: string;
-  title: string;
-  status: string;
-  startTime: string;
-  token: string | null;
-}
-
+const route = useRoute();
 const router = useRouter();
-const tables = ref<HostedRow[]>([]);
-const loading = ref(true);
+const tables = ref<{ gathering: string; title: string; status: string; startTime: string }[]>([]);
+const form = reactive({ title: "", area: "", startTime: "", endTime: "", cutoffTime: "", capacity: 4, confirmedVenue: "", details: "" });
+const busy = ref(false);
 const errorMessage = ref("");
 
-async function load() {
-  const session = getStoredSession() ?? "";
-  const mine = await client.api.tables.mine({ session });
-  if ("error" in mine) {
-    errorMessage.value = "Could not load your tables.";
-    loading.value = false;
+// what each refusal of a create means to the host
+const refusals: Record<string, string> = {
+  INVALID_REQUEST: "Check the title, area, and times. RSVPs have to close in the future and before the start, and the start has to come before the end.",
+  CONFLICT: "You already have 3 active tables. Book or cancel one first.",
+  UNAUTHORIZED: "Your session ended. Sign in again.",
+};
+
+// a datetime-local field holds local time with no zone, and the server takes a full timestamp
+const timestamp = (local: string) => (local ? new Date(local).toISOString() : "");
+const shown = (time: string) => new Date(time).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+
+async function handleUnauthorized() {
+  setStoredSession(null);
+  authState.user = null;
+  authState.checked = true;
+  await router.replace({ path: "/login", query: { redirect: route.fullPath } });
+}
+
+async function loadTables() {
+  const result = await client.gatherings.mine({ session: getStoredSession() ?? "" });
+  if ("error" in result) {
+    if (result.error === "UNAUTHORIZED") await handleUnauthorized();
     return;
   }
-  // the table page is reached through a link, so each row opens the table's first active link
-  tables.value = await Promise.all(
-    mine.hosted.tables.map(async (t) => {
-      const links = await client.api.links.list({ session, gathering: t.gathering });
-      const active = "error" in links ? undefined : links.shared.links.find((l) => l.active);
-      return { gathering: t.gathering, title: t.title, status: t.status, startTime: String(t.startTime), token: active?.token ?? null };
-    }),
-  );
-  loading.value = false;
+  tables.value = result.hosted.tables;
+}
+onMounted(loadTables);
+
+async function createTable() {
+  if (busy.value) return;
+  busy.value = true;
+  errorMessage.value = "";
+  const result = await client.gatherings.create({
+    session: getStoredSession() ?? "",
+    title: form.title,
+    area: form.area,
+    startTime: timestamp(form.startTime),
+    endTime: timestamp(form.endTime),
+    cutoffTime: timestamp(form.cutoffTime),
+    capacity: form.capacity,
+    confirmedVenue: form.confirmedVenue,
+    details: form.details,
+  });
+  busy.value = false;
+  if ("error" in result) {
+    if (result.error === "UNAUTHORIZED") {
+      await handleUnauthorized();
+      return;
+    }
+    errorMessage.value = refusals[result.error] ?? "Could not create the table.";
+    return;
+  }
+  await router.push(`/tables/${result.gathering}`);
 }
 
 async function signOut() {
   await logoutCurrentSession();
   await router.replace("/login");
 }
-
-const when = (iso: string) => new Date(iso).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-
-onMounted(load);
 </script>
 
 <template>
-  <main class="shell card stack">
-    <div class="row">
-      <strong>Seat at the table</strong>
-      <span v-if="authState.user" class="muted">{{ authState.user.name ?? authState.user.email }}</span>
-    </div>
-    <RouterLink class="btn btn-primary" to="/new">Host a new table</RouterLink>
+  <main class="shell stack">
+    <section class="card stack">
+      <strong>My tables</strong>
+      <div v-if="authState.user" class="muted">{{ authState.user.name ?? authState.user.email }}</div>
+      <p v-if="tables.length === 0" class="muted">You have not created a table yet.</p>
+      <RouterLink v-for="table in tables" :key="table.gathering" class="btn" :to="`/tables/${table.gathering}`">
+        {{ table.title }}
+        <span class="muted">· {{ table.status }} · {{ shown(table.startTime) }}</span>
+      </RouterLink>
+    </section>
 
-    <strong>Your tables</strong>
-    <p v-if="loading" class="muted">Loading…</p>
-    <p v-else-if="errorMessage" class="error">{{ errorMessage }}</p>
-    <p v-else-if="tables.length === 0" class="muted">You aren't hosting any tables yet.</p>
-    <ul v-else class="list">
-      <li v-for="t in tables" :key="t.gathering">
-        <RouterLink v-if="t.token" :to="`/t/${t.token}`">{{ t.title }}</RouterLink>
-        <span v-else>{{ t.title }} <span class="muted">(no active link)</span></span>
-        <div class="muted">{{ when(t.startTime) }} · {{ t.status.toLowerCase() }}</div>
-      </li>
-    </ul>
+    <form class="card stack" @submit.prevent="createTable">
+      <strong>Create a table</strong>
+      <label class="stack">Title <input v-model="form.title" required maxlength="100" /></label>
+      <label class="stack">Area <input v-model="form.area" required maxlength="100" placeholder="Kendall Square" /></label>
+      <label class="stack">RSVPs close <input v-model="form.cutoffTime" type="datetime-local" required /></label>
+      <label class="stack">Event start <input v-model="form.startTime" type="datetime-local" required /></label>
+      <label class="stack">Event close <input v-model="form.endTime" type="datetime-local" required /></label>
+      <label class="stack">Guest spots <input v-model.number="form.capacity" type="number" min="1" step="1" required /></label>
+      <label class="stack">Venue (optional) <input v-model="form.confirmedVenue" maxlength="100" /></label>
+      <label class="stack">Details (optional) <input v-model="form.details" maxlength="300" /></label>
+      <button type="submit" class="btn btn-primary" :disabled="busy">{{ busy ? "Creating…" : "Create table" }}</button>
+      <p v-if="errorMessage" class="error" role="alert">{{ errorMessage }}</p>
+    </form>
 
     <button type="button" class="btn" @click="signOut">Sign out</button>
   </main>

@@ -8,16 +8,17 @@ When Petrock redirects back to the application callback with `code` and `state`,
 
 ## Test account login
 
-For local and demo testing without Touchstone credentials, clicking the test-account button [signs in as the demo test user](reaction:Auth.Demo.TestLogin), accepting optional `returnTo` and an optional `account`: `guest` signs in as a second demo user, so one person can act as a host and a guest in two browser windows, and anything else signs in as the original test student. Using [return path normalization](computation:normalizeReturnTo), [current time](computation:now), [session lifetime](computation:sessionLifetimeMs), and the demo identity derivations ([test external id](computation:testAccountExternalId), [test email](computation:testAccountEmail), [test name](computation:testAccountName), [test affiliation](computation:testAccountAffiliation)), the endpoint authenticates the test user via `Authenticating.authenticate`, queries `Authenticating._getUser` for `email`, `domain`, and optional `name` and `affiliation`, and finally calls `Sessioning.start` before returning `session`, `user`, `returnTo`, `email`, `domain`, and optional `name` and `affiliation`.
+For local and non-production demo testing without Touchstone credentials, `/auth/test-login` accepts optional `returnTo` and an optional `account` (`guest` signs in as a second demo user, so one person can act as a host and a guest in two browser windows; anything else signs in as the original test student) and is handled by two mutually exclusive reactions based on [test-login enablement](computation:testLoginEnabled): when `false` (the default unless `ENABLE_TEST_LOGIN=true` outside production), [rejecting disabled test-account login](reaction:Auth.Demo.TestLoginDisabled) responds with `TEST_LOGIN_DISABLED` without authenticating or starting a session; when `true`, clicking the test-account button [signs in as the demo test user](reaction:Auth.Demo.TestLogin), using [return path normalization](computation:normalizeReturnTo), [current time](computation:now), [session lifetime](computation:sessionLifetimeMs), and the demo identity derivations ([test external id](computation:testAccountExternalId), [test email](computation:testAccountEmail), [test name](computation:testAccountName), [test affiliation](computation:testAccountAffiliation)) to authenticate the test user via `Authenticating.authenticate`, query `Authenticating._getUser` for `email`, `domain`, and optional `name` and `affiliation`, and finally call `Sessioning.start` before returning `session`, `user`, `returnTo`, `email`, `domain`, and optional `name` and `affiliation`.
 
 ## Session inspection and logout
 
-A client checks its session by calling [session inspection](reaction:Auth.Session.Me) with optional `session`, using [session presence check](computation:hasSession) and [current time](computation:now). When `hasSession` is false, or when `Sessioning._active` or `Authenticating._getUser` produces no row, the endpoint returns `authenticated: false` without mutating state. When `hasSession` is true and both `Sessioning._active` and `Authenticating._getUser` succeed, the endpoint returns `authenticated: true`, `user`, `email`, `domain`, and optional `name` and `affiliation`. Signing out [ends the active session](reaction:Auth.Session.Logout) by accepting `session`, binding [current time](computation:now), calling `Sessioning.end`, and returning `ended` (or refusing `UNKNOWN_SESSION` if the session is no longer active).
+A client checks its session by calling [session inspection](reaction:Auth.Session.Me) with optional `session`, using [session presence check](computation:hasSession), [current time](computation:now), and [test-login enablement](computation:testLoginEnabled). When `hasSession` is false, or when `Sessioning._active` or `Authenticating._getUser` produces no row, the endpoint returns `authenticated: false` and `testLoginEnabled` without mutating state. When `hasSession` is true and both `Sessioning._active` and `Authenticating._getUser` succeed, the endpoint returns `authenticated: true`, `user`, `email`, `domain`, optional `name` and `affiliation`, and `testLoginEnabled`. Signing out [ends the active session](reaction:Auth.Session.Logout) by accepting `session`, binding [current time](computation:now), calling `Sessioning.end`, and returning `ended` (or refusing `UNKNOWN_SESSION` if the session is no longer active).
 
 ```endpoints
 Auth.Petrock.Start at /auth/petrock/start
 Auth.Petrock.Callback at /auth/petrock/callback
 Auth.Demo.TestLogin at /auth/test-login
+Auth.Demo.TestLoginDisabled at /auth/test-login
 Auth.Session.Me at /auth/me
 Auth.Session.Logout at /auth/logout
 ```
@@ -37,6 +38,9 @@ normalizeReturnTo(raw?: String) : String
 
 buildPetrockAuthUrl(state: String) : String
   Builds the Petrock MIT Touchstone OIDC authorization URL containing client_id, redirect_uri, scope, response_type=code, and state.
+
+testLoginEnabled() : Flag
+  Returns true only when test-account login is explicitly enabled for local/non-production use (`ENABLE_TEST_LOGIN=true` and `NODE_ENV !== "production"`), otherwise false.
 
 testAccountExternalId(account?: String) : String
   Returns the fixed externalId for the demo test account named by account (guest, or the test student otherwise).
