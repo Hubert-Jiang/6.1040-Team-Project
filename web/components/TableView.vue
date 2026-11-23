@@ -60,7 +60,7 @@ async function signOut() {
       <strong>{{ table.title }}</strong>
       <div class="muted">
         <div>{{ table.status }}</div>
-        <div>{{ shown(table.startTime) }} to {{ shown(table.endTime) }}</div>
+        <div>Event from {{ shown(table.startTime) }} to {{ shown(table.endTime) }}</div>
         <div>RSVPs close {{ shown(table.cutoffTime) }}</div>
         <div>{{ table.confirmedVenue ? `${table.confirmedVenue}, ${table.area}` : table.area }}</div>
         <div v-if="table.details">{{ table.details }}</div>

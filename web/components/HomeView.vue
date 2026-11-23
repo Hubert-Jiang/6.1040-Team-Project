@@ -71,9 +71,9 @@ async function signOut() {
       <strong>Create a table</strong>
       <label class="stack">Title <input v-model="form.title" required maxlength="100" /></label>
       <label class="stack">Area <input v-model="form.area" required maxlength="100" placeholder="Kendall Square" /></label>
-      <label class="stack">Starts <input v-model="form.startTime" type="datetime-local" required /></label>
-      <label class="stack">Ends <input v-model="form.endTime" type="datetime-local" required /></label>
       <label class="stack">RSVPs close <input v-model="form.cutoffTime" type="datetime-local" required /></label>
+      <label class="stack">Event start <input v-model="form.startTime" type="datetime-local" required /></label>
+      <label class="stack">Event close <input v-model="form.endTime" type="datetime-local" required /></label>
       <label class="stack">Guest spots <input v-model.number="form.capacity" type="number" min="1" step="1" required /></label>
       <label class="stack">Venue (optional) <input v-model="form.confirmedVenue" maxlength="100" /></label>
       <label class="stack">Details (optional) <input v-model="form.details" maxlength="300" /></label>
