@@ -1,35 +1,14 @@
-import { MongoClient } from "mongodb";
-import { MongoMemoryServer } from "mongodb-memory-server";
 import { assembleApplication } from "./assembly.ts";
 import { sweepCutoffs } from "./cutoffs.ts";
+import { connectDatabase } from "./db.ts";
 import { startHost } from "./host.ts";
-
-async function connectDatabase() {
-  const uri = process.env.MONGODB_URI;
-  if (uri) {
-    const client = await new MongoClient(uri).connect();
-    return {
-      database: client.db(process.env.MONGODB_DB ?? "sync_engine_demo"),
-      close: () => client.close(),
-    };
-  }
-  const memoryServer = await MongoMemoryServer.create();
-  const client = await new MongoClient(memoryServer.getUri()).connect();
-  return {
-    database: client.db("sync_engine_demo"),
-    close: async () => {
-      await client.close();
-      await memoryServer.stop();
-    },
-  };
-}
 
 const { database, close } = await connectDatabase();
 const port = Number(process.env.PORT ?? 8080);
 const hostname = process.env.HOST ?? "127.0.0.1";
 const server = startHost({ hostname, port, database });
 
-console.log(`Auth demo listening at http://${server.hostname}:${server.port}`);
+console.log(`Server listening at http://${server.hostname}:${server.port} (db: ${database.databaseName})`);
 
 // how often tables are checked against their cutoff and end times, in milliseconds
 const SWEEP_MS = 60_000;

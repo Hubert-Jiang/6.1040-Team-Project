@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { type Collection, type Db, MongoServerError } from "mongodb";
 import { defaultPetrockClient, type PetrockClient } from "../auth/petrock.ts";
+import { ensureTtlIndex } from "../db.ts";
 
 export class InvalidIdentity extends Error {}
 export class EmailConflict extends Error {}
@@ -43,7 +44,8 @@ export class AuthenticatingConcept {
   readonly #users: Collection<UserDoc>;
   readonly #states: Collection<OidcStateDoc>;
   readonly #petrock: PetrockClient;
-  #indexes: Promise<unknown> | undefined;
+  #usersIndexes: Promise<unknown> | undefined;
+  #statesIndexes: Promise<unknown> | undefined;
 
   constructor(database: Db, name = "Authenticating", petrock: PetrockClient = defaultPetrockClient) {
     const prefix = name.toLowerCase();
@@ -52,17 +54,26 @@ export class AuthenticatingConcept {
     this.#petrock = petrock;
   }
 
-  #ready() {
-    this.#indexes ??= Promise.all([
+  #readyUsers() {
+    this.#usersIndexes ??= Promise.all([
       this.#users.createIndex({ externalId: 1 }, { unique: true }),
       this.#users.createIndex({ email: 1 }, { unique: true }),
-      this.#states.createIndex({ state: 1 }, { unique: true }),
-      this.#states.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
     ]).catch((error: unknown) => {
-      this.#indexes = undefined;
+      this.#usersIndexes = undefined;
       throw error;
     });
-    return this.#indexes;
+    return this.#usersIndexes;
+  }
+
+  #readyStates() {
+    this.#statesIndexes ??= Promise.all([
+      this.#states.createIndex({ state: 1 }, { unique: true }),
+      ensureTtlIndex(this.#states, "expiresAt", 0),
+    ]).catch((error: unknown) => {
+      this.#statesIndexes = undefined;
+      throw error;
+    });
+    return this.#statesIndexes;
   }
 
   async authenticate({
@@ -85,7 +96,7 @@ export class AuthenticatingConcept {
     const cleanName = name?.trim() || undefined;
     const cleanAffiliation = affiliation?.trim() || undefined;
 
-    await this.#ready();
+    await this.#readyUsers();
 
     const setFields: Partial<UserDoc> = { email: cleanEmail, domain };
     const unsetFields: Record<string, ""> = {};
@@ -123,7 +134,7 @@ export class AuthenticatingConcept {
     if (!isSafeRelativeReturnTo(returnTo)) {
       throw new InvalidReturnTo("Return path must be a relative application path.");
     }
-    await this.#ready();
+    await this.#readyStates();
     const state = randomBytes(24).toString("base64url");
     await this.#states.insertOne({
       _id: randomUUID(),
@@ -138,7 +149,7 @@ export class AuthenticatingConcept {
     if (!state.trim()) {
       throw new InvalidState("Login state is invalid or has expired; please try signing in again.");
     }
-    await this.#ready();
+    await this.#readyStates();
     const deleted = await this.#states.findOneAndDelete({
       state,
       expiresAt: { $gt: now },

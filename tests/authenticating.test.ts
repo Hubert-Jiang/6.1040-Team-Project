@@ -108,3 +108,21 @@ test("verifyOidcCode verifies code via Petrock client and refuses failures", asy
   await expect(auth.verifyOidcCode({ code: "" })).rejects.toBeInstanceOf(OidcExchangeFailed);
   await expect(auth.verifyOidcCode({ code: "bad" })).rejects.toBeInstanceOf(OidcExchangeFailed);
 });
+
+test("beginOidc replaces a conflicting pre-existing expiresAt index on oidc_states", async () => {
+  const db = await testDatabase();
+  const states = db.collection("authenticating.oidc_states");
+  await states.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 600 });
+
+  const localAuth = new AuthenticatingConcept(db, "Authenticating", mockPetrock);
+  const { state } = await localAuth.beginOidc({ returnTo: "/tables/abc", now: at(0) });
+  expect(state.length).toBeGreaterThan(10);
+
+  const indexes = await states.indexes();
+  expect(indexes).toContainEqual(
+    expect.objectContaining({
+      key: { expiresAt: 1 },
+      expireAfterSeconds: 0,
+    }),
+  );
+});

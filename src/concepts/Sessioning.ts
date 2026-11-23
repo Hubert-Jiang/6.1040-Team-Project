@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { Collection, Db } from "mongodb";
+import { ensureTtlIndex } from "../db.ts";
 
 export class InvalidSessionLifetime extends Error {}
 export class UnknownSession extends Error {}
@@ -24,12 +25,10 @@ export class SessioningConcept {
   }
 
   #ready() {
-    this.#indexes ??= this.#sessions
-      .createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
-      .catch((error: unknown) => {
-        this.#indexes = undefined;
-        throw error;
-      });
+    this.#indexes ??= ensureTtlIndex(this.#sessions, "expiresAt", 0).catch((error: unknown) => {
+      this.#indexes = undefined;
+      throw error;
+    });
     return this.#indexes;
   }
 
