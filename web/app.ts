@@ -6,6 +6,7 @@ import { authState, refreshAuth, sanitizeRedirect } from "./auth-client.ts";
 import CallbackView from "./components/CallbackView.vue";
 import HomeView from "./components/HomeView.vue";
 import LoginView from "./components/LoginView.vue";
+import CreateTableView from "./components/CreateTableView.vue";
 import TableView from "./components/TableView.vue";
 
 const router = createRouter({
@@ -13,7 +14,9 @@ const router = createRouter({
   routes: [
     { path: "/login", component: LoginView },
     { path: "/auth/petrock/callback", component: CallbackView },
-    { path: "/tables/:id", component: TableView, meta: { requiresAuth: true } },
+    // the table page opens from a share link and works without signing in
+    { path: "/t/:token", component: TableView },
+    { path: "/new", component: CreateTableView, meta: { requiresAuth: true } },
     { path: "/", component: HomeView, meta: { requiresAuth: true } },
     { path: "/:pathMatch(.*)*", redirect: "/" },
   ],

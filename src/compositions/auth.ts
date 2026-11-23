@@ -85,6 +85,7 @@ const TestLogin = endpoint(
   "/auth/test-login",
   ({
     returnTo,
+    account,
     now,
     lifetime,
     safeReturnTo,
@@ -99,16 +100,16 @@ const TestLogin = endpoint(
     resolvedAffiliation,
     session,
   }) =>
-    receive({ returnTo })
+    receive({ returnTo, account })
       .then(
         where(
           compute(computations.now, {}, now),
           compute(computations.sessionLifetimeMs, {}, lifetime),
           compute(computations.normalizeReturnTo, { raw: returnTo }, safeReturnTo),
-          compute(computations.testAccountExternalId, {}, externalId),
-          compute(computations.testAccountEmail, {}, email),
-          compute(computations.testAccountName, {}, name),
-          compute(computations.testAccountAffiliation, {}, affiliation),
+          compute(computations.testAccountExternalId, { account }, externalId),
+          compute(computations.testAccountEmail, { account }, email),
+          compute(computations.testAccountName, { account }, name),
+          compute(computations.testAccountAffiliation, { account }, affiliation),
         ).then(concepts.Authenticating.authenticate({ externalId, email, name, affiliation }).responds({ user })),
       )
       .then(
@@ -141,7 +142,7 @@ const TestLogin = endpoint(
           }),
         ),
       ),
-  { input: { defaults: { returnTo: null } } },
+  { input: { defaults: { returnTo: null, account: null } } },
 );
 
 const Me = endpoint(

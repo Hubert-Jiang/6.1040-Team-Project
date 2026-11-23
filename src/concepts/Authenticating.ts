@@ -191,8 +191,8 @@ export class AuthenticatingConcept {
     ];
   }
 
-  async _hasDomain({ user, domain }: { user: string; domain: string }): Promise<Array<{ matches: boolean }>> {
+  async _hasDomain({ user, domain }: { user: string; domain: string }): Promise<{ matches: boolean }> {
     const doc = await this.#users.findOne({ _id: user });
-    return [{ matches: doc ? doc.domain.toLowerCase() === domain.trim().toLowerCase() : false }];
+    return { matches: doc ? doc.domain.toLowerCase() === domain.trim().toLowerCase() : false };
   }
 }

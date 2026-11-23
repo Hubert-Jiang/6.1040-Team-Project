@@ -18,6 +18,8 @@ export default defineConfig({
       "/auth/test-login": "http://127.0.0.1:8080",
       "/auth/me": "http://127.0.0.1:8080",
       "/auth/logout": "http://127.0.0.1:8080",
+      // the table and link endpoints; every one is a POST, so no page route is shadowed
+      "/api": "http://127.0.0.1:8080",
     },
   },
 });

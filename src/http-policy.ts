@@ -2,11 +2,32 @@ import { httpPolicy } from "@mit-sdg/sync-engine-http/policy";
 
 export const appHttpPolicy = httpPolicy({
   publicErrors: {
+    // signing in
     INVALID_IDENTITY: "INVALID_REQUEST",
     EMAIL_CONFLICT: "CONFLICT",
     INVALID_RETURN_TO: "INVALID_REQUEST",
     INVALID_STATE: "INVALID_REQUEST",
     OIDC_EXCHANGE_FAILED: "UNAUTHORIZED",
     UNKNOWN_SESSION: "UNAUTHORIZED",
+    // creating a table
+    INVALID_DETAILS: "INVALID_REQUEST",
+    INVALID_SCHEDULE: "INVALID_REQUEST",
+    INVALID_CAPACITY: "INVALID_REQUEST",
+    INVALID_POOL: "INVALID_REQUEST",
+    HOST_LIMIT_REACHED: "CONFLICT",
+    SCOPE_MISMATCH: "FORBIDDEN",
+    // viewing and sharing links
+    LINK_NOT_FOUND: "NOT_FOUND",
+    INVALID_EXPIRY: "INVALID_REQUEST",
+    NOT_HOST: "FORBIDDEN",
+    NOT_CREATOR: "FORBIDDEN",
+    // accepting and withdrawing
+    OWN_TABLE: "CONFLICT",
+    TABLE_CLOSED: "CONFLICT",
+    ALREADY_ACCEPTED: "CONFLICT",
+    NOT_ACCEPTED: "CONFLICT",
+    ALREADY_IN_POOL: "CONFLICT",
+    POOL_CLOSED: "CONFLICT",
+    CANNOT_CANCEL: "CONFLICT",
   },
 });

@@ -8,7 +8,7 @@ When Petrock redirects back to the application callback with `code` and `state`,
 
 ## Test account login
 
-For local and demo testing without Touchstone credentials, clicking the test-account button [signs in as the demo test user](reaction:Auth.Demo.TestLogin), accepting optional `returnTo`. Using [return path normalization](computation:normalizeReturnTo), [current time](computation:now), [session lifetime](computation:sessionLifetimeMs), and the demo identity derivations ([test external id](computation:testAccountExternalId), [test email](computation:testAccountEmail), [test name](computation:testAccountName), [test affiliation](computation:testAccountAffiliation)), the endpoint authenticates the test user via `Authenticating.authenticate`, queries `Authenticating._getUser` for `email`, `domain`, and optional `name` and `affiliation`, and finally calls `Sessioning.start` before returning `session`, `user`, `returnTo`, `email`, `domain`, and optional `name` and `affiliation`.
+For local and demo testing without Touchstone credentials, clicking the test-account button [signs in as the demo test user](reaction:Auth.Demo.TestLogin), accepting optional `returnTo` and an optional `account`: `guest` signs in as a second demo user, so one person can act as a host and a guest in two browser windows, and anything else signs in as the original test student. Using [return path normalization](computation:normalizeReturnTo), [current time](computation:now), [session lifetime](computation:sessionLifetimeMs), and the demo identity derivations ([test external id](computation:testAccountExternalId), [test email](computation:testAccountEmail), [test name](computation:testAccountName), [test affiliation](computation:testAccountAffiliation)), the endpoint authenticates the test user via `Authenticating.authenticate`, queries `Authenticating._getUser` for `email`, `domain`, and optional `name` and `affiliation`, and finally calls `Sessioning.start` before returning `session`, `user`, `returnTo`, `email`, `domain`, and optional `name` and `affiliation`.
 
 ## Session inspection and logout
 
@@ -38,15 +38,15 @@ normalizeReturnTo(raw?: String) : String
 buildPetrockAuthUrl(state: String) : String
   Builds the Petrock MIT Touchstone OIDC authorization URL containing client_id, redirect_uri, scope, response_type=code, and state.
 
-testAccountExternalId() : String
-  Returns the fixed externalId for the demo test account.
+testAccountExternalId(account?: String) : String
+  Returns the fixed externalId for the demo test account named by account (guest, or the test student otherwise).
 
-testAccountEmail() : String
-  Returns the fixed email address for the demo test account.
+testAccountEmail(account?: String) : String
+  Returns the fixed email address for the demo test account named by account (guest, or the test student otherwise).
 
-testAccountName() : String
-  Returns the fixed display name for the demo test account.
+testAccountName(account?: String) : String
+  Returns the fixed display name for the demo test account named by account (guest, or the test student otherwise).
 
-testAccountAffiliation() : String
-  Returns the fixed institutional affiliation for the demo test account.
+testAccountAffiliation(account?: String) : String
+  Returns the fixed institutional affiliation for the demo test account named by account (guest, or the test student otherwise).
 ```

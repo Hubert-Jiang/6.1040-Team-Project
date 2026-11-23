@@ -48,8 +48,8 @@ test("authenticate creates and updates a user by externalId and answers queries"
       affiliation: "student",
     },
   ]);
-  expect(await auth._hasDomain({ user: first.user, domain: "MIT.EDU" })).toEqual([{ matches: true }]);
-  expect(await auth._hasDomain({ user: first.user, domain: "harvard.edu" })).toEqual([{ matches: false }]);
+  expect(await auth._hasDomain({ user: first.user, domain: "MIT.EDU" })).toEqual({ matches: true });
+  expect(await auth._hasDomain({ user: first.user, domain: "harvard.edu" })).toEqual({ matches: false });
 
   const second = await auth.authenticate({
     externalId: "alyssa@mit.edu",
