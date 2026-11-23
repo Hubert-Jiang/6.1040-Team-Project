@@ -18,6 +18,7 @@ export default defineConfig({
       "/auth/test-login": "http://127.0.0.1:8080",
       "/auth/me": "http://127.0.0.1:8080",
       "/auth/logout": "http://127.0.0.1:8080",
+      "/gatherings": "http://127.0.0.1:8080",
     },
   },
 });
