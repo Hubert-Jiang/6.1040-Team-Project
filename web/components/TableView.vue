@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { openTableUrl } from "../../src/venues/opentable.ts";
-import { client, getStoredSession, logoutCurrentSession } from "../auth-client.ts";
+import { authState, client, getStoredSession, logoutCurrentSession, setStoredSession } from "../auth-client.ts";
 
 interface Table {
   title: string;
@@ -35,16 +35,39 @@ const bookingUrl = computed(() =>
     : "",
 );
 
+async function handleUnauthorized() {
+  setStoredSession(null);
+  authState.user = null;
+  authState.checked = true;
+  await router.replace({ path: "/login", query: { redirect: route.fullPath } });
+}
+
 async function load() {
   const result = await client.gatherings.view({ session: getStoredSession() ?? "", gathering: tableId.value });
-  table.value = "error" in result ? null : result;
+  if ("error" in result) {
+    if (result.error === "UNAUTHORIZED") {
+      await handleUnauthorized();
+      return;
+    }
+    table.value = null;
+  } else {
+    table.value = result;
+  }
   loaded.value = true;
 }
 onMounted(load);
 
 async function act(action: "confirm" | "book" | "cancel") {
   const result = await client.gatherings[action]({ session: getStoredSession() ?? "", gathering: tableId.value });
-  errorMessage.value = "error" in result ? "That did not go through. The table may have passed its cutoff or changed since this page loaded." : "";
+  if ("error" in result) {
+    if (result.error === "UNAUTHORIZED") {
+      await handleUnauthorized();
+      return;
+    }
+    errorMessage.value = "That did not go through. The table may have passed its cutoff or changed since this page loaded.";
+  } else {
+    errorMessage.value = "";
+  }
   await load();
 }
 

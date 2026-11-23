@@ -2,7 +2,7 @@ import "./styles/main.css";
 import { createApp } from "vue";
 import { createRouter, createWebHistory } from "vue-router";
 import App from "./App.vue";
-import { authState, refreshAuth, sanitizeRedirect } from "./auth-client.ts";
+import { authState, getStoredSession, refreshAuth, sanitizeRedirect } from "./auth-client.ts";
 import CallbackView from "./components/CallbackView.vue";
 import HomeView from "./components/HomeView.vue";
 import LoginView from "./components/LoginView.vue";
@@ -24,7 +24,8 @@ router.beforeEach(async (to) => {
     return true;
   }
 
-  const user = authState.checked ? authState.user : await refreshAuth();
+  const needsCheck = !authState.checked || Boolean(to.meta.requiresAuth) || Boolean(getStoredSession());
+  const user = needsCheck ? await refreshAuth() : authState.user;
 
   if (to.meta.requiresAuth && !user) {
     return {

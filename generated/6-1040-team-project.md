@@ -130,16 +130,17 @@ Defined in [Sessioning](../design/concepts/Sessioning.md), line 1.
 
 ## Computations
 
-- `buildPetrockAuthUrl(state: String) : String` — [Auth](../design/compositions/Auth.md), line 38.
-- `hasSession(session?: String) : Flag` — [Auth](../design/compositions/Auth.md), line 32.
-- `normalizeReturnTo(raw?: String) : String` — [Auth](../design/compositions/Auth.md), line 35.
-- `now() : DateTime` — [Auth](../design/compositions/Auth.md), line 26.
+- `buildPetrockAuthUrl(state: String) : String` — [Auth](../design/compositions/Auth.md), line 39.
+- `hasSession(session?: String) : Flag` — [Auth](../design/compositions/Auth.md), line 33.
+- `normalizeReturnTo(raw?: String) : String` — [Auth](../design/compositions/Auth.md), line 36.
+- `now() : DateTime` — [Auth](../design/compositions/Auth.md), line 27.
 - `parseTime(raw: String) : DateTime` — [Gatherings](../design/compositions/Gatherings.md), line 29.
-- `sessionLifetimeMs() : Number` — [Auth](../design/compositions/Auth.md), line 29.
-- `testAccountAffiliation() : String` — [Auth](../design/compositions/Auth.md), line 50.
-- `testAccountEmail() : String` — [Auth](../design/compositions/Auth.md), line 44.
-- `testAccountExternalId() : String` — [Auth](../design/compositions/Auth.md), line 41.
-- `testAccountName() : String` — [Auth](../design/compositions/Auth.md), line 47.
+- `sessionLifetimeMs() : Number` — [Auth](../design/compositions/Auth.md), line 30.
+- `testAccountAffiliation() : String` — [Auth](../design/compositions/Auth.md), line 54.
+- `testAccountEmail() : String` — [Auth](../design/compositions/Auth.md), line 48.
+- `testAccountExternalId() : String` — [Auth](../design/compositions/Auth.md), line 45.
+- `testAccountName() : String` — [Auth](../design/compositions/Auth.md), line 51.
+- `testLoginEnabled() : Flag` — [Auth](../design/compositions/Auth.md), line 42.
 
 ## Formers
 
@@ -173,6 +174,8 @@ Authored path: `Auth.Demo.TestLogin`.
 ```reaction
 when RequestBoundary.request (path: "/auth/test-login", requestId, returnTo)
 where
+  enabled is testLoginEnabled
+  enabled is among [true]
   now is now
   lifetime is sessionLifetimeMs
   safeReturnTo is normalizeReturnTo (raw: returnTo)
@@ -214,6 +217,21 @@ where
   safeReturnTo is normalizeReturnTo (raw: returnTo)
 then
   RequestBoundary.respond (affiliation: resolvedAffiliation, domain, email: resolvedEmail, name: resolvedName, requestId, returnTo: safeReturnTo, session, user)
+```
+
+### Auth.Demo.TestLoginDisabled
+
+Authored path: `Auth.Demo.TestLoginDisabled`.
+- Covered by [Auth](../design/compositions/Auth.md), line 11.
+- Covered by [Auth](../design/compositions/Auth.md), line 21.
+
+```reaction
+when RequestBoundary.request (path: "/auth/test-login", requestId, returnTo)
+where
+  enabled is testLoginEnabled
+  enabled is among [false]
+then
+  RequestBoundary.respond (error: "TEST_LOGIN_DISABLED", requestId)
 ```
 
 ### Auth.Petrock.Callback
@@ -323,7 +341,7 @@ then
 
 Authored path: `Auth.Session.Logout`.
 - Covered by [Auth](../design/compositions/Auth.md), line 15.
-- Covered by [Auth](../design/compositions/Auth.md), line 22.
+- Covered by [Auth](../design/compositions/Auth.md), line 23.
 
 ```reaction
 when RequestBoundary.request (path: "/auth/logout", requestId, session)
@@ -337,7 +355,7 @@ then
 
 Authored path: `Auth.Session.Logout`.
 - Covered by [Auth](../design/compositions/Auth.md), line 15.
-- Covered by [Auth](../design/compositions/Auth.md), line 22.
+- Covered by [Auth](../design/compositions/Auth.md), line 23.
 
 ```reaction
 when Sessioning.end (now, session, ended), asked by Auth.Session.Logout
@@ -351,68 +369,72 @@ then
 
 Authored path: `Auth.Session.Me`.
 - Covered by [Auth](../design/compositions/Auth.md), line 15.
-- Covered by [Auth](../design/compositions/Auth.md), line 21.
+- Covered by [Auth](../design/compositions/Auth.md), line 22.
 
 ```reaction
 when RequestBoundary.request (path: "/auth/me", requestId, session)
 where
   sessionPresent is hasSession (session)
   sessionPresent is among [true]
+  testLoginEnabled is testLoginEnabled
   now is now
   Sessioning._active (now, session) has (subject: user)
   Authenticating._getUser (user) has (affiliation, domain, email, name)
 then
-  RequestBoundary.respond (affiliation, authenticated: true, domain, email, name, requestId, user)
+  RequestBoundary.respond (affiliation, authenticated: true, domain, email, name, requestId, testLoginEnabled, user)
 ```
 
 ### Auth.Session.Me:session-inactive
 
 Authored path: `Auth.Session.Me`.
 - Covered by [Auth](../design/compositions/Auth.md), line 15.
-- Covered by [Auth](../design/compositions/Auth.md), line 21.
+- Covered by [Auth](../design/compositions/Auth.md), line 22.
 
 ```reaction
 when RequestBoundary.request (path: "/auth/me", requestId, session)
 where
   sessionPresent is hasSession (session)
   sessionPresent is among [true]
+  testLoginEnabled is testLoginEnabled
   now is now
   no Sessioning._active (now, session)
 then
-  RequestBoundary.respond (authenticated: false, requestId)
+  RequestBoundary.respond (authenticated: false, requestId, testLoginEnabled)
 ```
 
 ### Auth.Session.Me:session-missing
 
 Authored path: `Auth.Session.Me`.
 - Covered by [Auth](../design/compositions/Auth.md), line 15.
-- Covered by [Auth](../design/compositions/Auth.md), line 21.
+- Covered by [Auth](../design/compositions/Auth.md), line 22.
 
 ```reaction
 when RequestBoundary.request (path: "/auth/me", requestId, session)
 where
   sessionPresent is hasSession (session)
   sessionPresent is among [false]
+  testLoginEnabled is testLoginEnabled
 then
-  RequestBoundary.respond (authenticated: false, requestId)
+  RequestBoundary.respond (authenticated: false, requestId, testLoginEnabled)
 ```
 
 ### Auth.Session.Me:user-missing
 
 Authored path: `Auth.Session.Me`.
 - Covered by [Auth](../design/compositions/Auth.md), line 15.
-- Covered by [Auth](../design/compositions/Auth.md), line 21.
+- Covered by [Auth](../design/compositions/Auth.md), line 22.
 
 ```reaction
 when RequestBoundary.request (path: "/auth/me", requestId, session)
 where
   sessionPresent is hasSession (session)
   sessionPresent is among [true]
+  testLoginEnabled is testLoginEnabled
   now is now
   Sessioning._active (now, session) has (subject: user)
   no Authenticating._getUser (user)
 then
-  RequestBoundary.respond (authenticated: false, requestId)
+  RequestBoundary.respond (authenticated: false, requestId, testLoginEnabled)
 ```
 
 ### DeliverFaultToAsker

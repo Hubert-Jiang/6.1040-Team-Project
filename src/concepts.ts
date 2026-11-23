@@ -123,6 +123,8 @@ export const applicationConceptSet = conceptSet(
       typeof session === "string" && session.trim().length > 0,
     normalizeReturnTo: ({ raw }: { raw?: string | null }) => normalizeReturnToPath(raw),
     buildPetrockAuthUrl: ({ state }: { state: string }) => buildPetrockAuthorizationUrl(state),
+    testLoginEnabled: (_input: Record<string, never>) =>
+      process.env.ENABLE_TEST_LOGIN === "true" && process.env.NODE_ENV !== "production",
     testAccountExternalId: (_input: Record<string, never>) => "test-student@mit.edu",
     testAccountEmail: (_input: Record<string, never>) => "test-student@mit.edu",
     testAccountName: (_input: Record<string, never>) => "Test Student",

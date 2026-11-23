@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from "vue";
-import { useRouter } from "vue-router";
-import { authState, client, getStoredSession, logoutCurrentSession } from "../auth-client.ts";
+import { useRoute, useRouter } from "vue-router";
+import { authState, client, getStoredSession, logoutCurrentSession, setStoredSession } from "../auth-client.ts";
 
+const route = useRoute();
 const router = useRouter();
 const tables = ref<{ gathering: string; title: string; status: string; startTime: string }[]>([]);
 const form = reactive({ title: "", area: "", startTime: "", endTime: "", cutoffTime: "", capacity: 4, confirmedVenue: "", details: "" });
@@ -20,9 +21,20 @@ const refusals: Record<string, string> = {
 const timestamp = (local: string) => (local ? new Date(local).toISOString() : "");
 const shown = (time: string) => new Date(time).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 
+async function handleUnauthorized() {
+  setStoredSession(null);
+  authState.user = null;
+  authState.checked = true;
+  await router.replace({ path: "/login", query: { redirect: route.fullPath } });
+}
+
 async function loadTables() {
   const result = await client.gatherings.mine({ session: getStoredSession() ?? "" });
-  if (!("error" in result)) tables.value = result.hosted.tables;
+  if ("error" in result) {
+    if (result.error === "UNAUTHORIZED") await handleUnauthorized();
+    return;
+  }
+  tables.value = result.hosted.tables;
 }
 onMounted(loadTables);
 
@@ -43,6 +55,10 @@ async function createTable() {
   });
   busy.value = false;
   if ("error" in result) {
+    if (result.error === "UNAUTHORIZED") {
+      await handleUnauthorized();
+      return;
+    }
     errorMessage.value = refusals[result.error] ?? "Could not create the table.";
     return;
   }

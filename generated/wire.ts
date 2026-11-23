@@ -33,9 +33,17 @@ export type AppWire = {
       "domain": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Authenticating"]["_getUser"]>>>, ["domain"]>>;
       "email": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Authenticating"]["_getUser"]>>>, ["email"]>>;
       "name": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Authenticating"]["_getUser"]>>>, ["name"]>>;
+      "testLoginEnabled": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["testLoginEnabled"]["fn"]>>, []>>;
       "user": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Authenticating"]["_getUser"]>[0], ["user"]>, AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Sessioning"]["_active"]>>>, ["subject"]>]>>;
     } | {
       "authenticated": false;
+      "testLoginEnabled": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["testLoginEnabled"]["fn"]>>, []>>;
+    } | {
+      "authenticated": false;
+      "testLoginEnabled": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["testLoginEnabled"]["fn"]>>, []>>;
+    } | {
+      "authenticated": false;
+      "testLoginEnabled": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["testLoginEnabled"]["fn"]>>, []>>;
     };
     error: { error: AppWideError | "INVALID_INPUT" };
   };
@@ -77,7 +85,7 @@ export type AppWire = {
       "session": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Sessioning"]["start"]>>, ["session"]>>;
       "user": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["start"]>[0], ["subject"]>, AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Authenticating"]["_getUser"]>[0], ["user"]>]>>;
     };
-    error: { error: AppWideError | "EMAIL_CONFLICT" | "INVALID_IDENTITY" | "INVALID_INPUT" | "INVALID_SESSION_LIFETIME" };
+    error: { error: AppWideError | "EMAIL_CONFLICT" | "INVALID_IDENTITY" | "INVALID_INPUT" | "INVALID_SESSION_LIFETIME" | "TEST_LOGIN_DISABLED" };
   };
   "/gatherings/book": {
     input: {
@@ -182,9 +190,17 @@ export type AppWireHttp = {
       "domain": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Authenticating"]["_getUser"]>>>, ["domain"]>>;
       "email": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Authenticating"]["_getUser"]>>>, ["email"]>>;
       "name": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Authenticating"]["_getUser"]>>>, ["name"]>>;
+      "testLoginEnabled": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["testLoginEnabled"]["fn"]>>, []>>;
       "user": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Authenticating"]["_getUser"]>[0], ["user"]>, AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Sessioning"]["_active"]>>>, ["subject"]>]>>;
     } | {
       "authenticated": false;
+      "testLoginEnabled": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["testLoginEnabled"]["fn"]>>, []>>;
+    } | {
+      "authenticated": false;
+      "testLoginEnabled": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["testLoginEnabled"]["fn"]>>, []>>;
+    } | {
+      "authenticated": false;
+      "testLoginEnabled": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["testLoginEnabled"]["fn"]>>, []>>;
     };
     error: { error: HttpAppWideError | "INVALID_REQUEST" };
   };
@@ -226,7 +242,7 @@ export type AppWireHttp = {
       "session": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Sessioning"]["start"]>>, ["session"]>>;
       "user": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["start"]>[0], ["subject"]>, AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Authenticating"]["_getUser"]>[0], ["user"]>]>>;
     };
-    error: { error: HttpAppWideError | "CONFLICT" | "INTERNAL_ERROR" | "INVALID_REQUEST" };
+    error: { error: HttpAppWideError | "CONFLICT" | "FORBIDDEN" | "INTERNAL_ERROR" | "INVALID_REQUEST" };
   };
   "/gatherings/book": {
     input: {

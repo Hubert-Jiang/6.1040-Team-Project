@@ -9,6 +9,8 @@ let server: ReturnType<typeof startHost> | undefined;
 let client: Client<AppWireHttp, HttpClientError>;
 // the session of the demo test account, who hosts in these tests
 let host: string;
+const originalEnableTestLogin = process.env.ENABLE_TEST_LOGIN;
+const originalNodeEnv = process.env.NODE_ENV;
 
 // `soon(h)` is h hours from now, as the text a browser sends
 const soon = (hours: number) => new Date(Date.now() + hours * 3_600_000).toISOString();
@@ -16,6 +18,8 @@ const soon = (hours: number) => new Date(Date.now() + hours * 3_600_000).toISOSt
 const dinner = () => ({ session: host, title: "Break dinner", area: "Kendall Square", cutoffTime: soon(4), startTime: soon(6), endTime: soon(8), capacity: 4 });
 
 beforeEach(async () => {
+  process.env.ENABLE_TEST_LOGIN = "true";
+  process.env.NODE_ENV = "test";
   server?.stop(true);
   const petrock = { exchangeCode: async () => ({ externalId: "ben@mit.edu", email: "ben@mit.edu", name: "Ben Bitdiddle", affiliation: "student" }) };
   server = startHost({ hostname: "127.0.0.1", port: 0, database: await testDatabase(), petrock });
@@ -27,6 +31,10 @@ beforeEach(async () => {
 
 afterAll(() => {
   server?.stop(true);
+  if (originalEnableTestLogin === undefined) delete process.env.ENABLE_TEST_LOGIN;
+  else process.env.ENABLE_TEST_LOGIN = originalEnableTestLogin;
+  if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
+  else process.env.NODE_ENV = originalNodeEnv;
 });
 
 /** Returns the session of a second user, signed in through the stand-in for Touchstone. */
