@@ -117,6 +117,7 @@ export const applicationConceptSet = conceptSet(
   },
   {
     now: (_input: Record<string, never>) => new Date(),
+    parseTime: ({ raw }: { raw: string }) => new Date(raw),
     sessionLifetimeMs: (_input: Record<string, never>) => SESSION_LIFETIME_MS,
     hasSession: ({ session }: { session?: string | null }) =>
       typeof session === "string" && session.trim().length > 0,
