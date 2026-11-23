@@ -112,7 +112,7 @@ test("a host sees all of their own gatherings, latest start first", async () => 
   expect(await h._getHosted({ host: "nobody" })).toEqual([]);
 });
 
-test("gatherings past their cutoff are the open ones to expire and the confirmed ones to lock", async () => {
+test("gatherings past their cutoff are the open ones to expire and the confirmed or booked ones to freeze", async () => {
   const { gathering: open } = await h.create(dinner);
   const { gathering: confirmed } = await h.create({ ...dinner, cutoffTime: at(3) });
   const { gathering: booked } = await h.create({ ...dinner, confirmedVenue: "Oleana" });
@@ -123,12 +123,34 @@ test("gatherings past their cutoff are the open ones to expire and the confirmed
   await h.cancel({ gathering: cancelled, host: "alice", now: at(1) });
 
   expect(await h._getPastCutoff({ now: at(2) })).toEqual([]);
-  // a confirmed gathering is due at its cutoff, an open one only after it
+  // a confirmed or booked gathering is due at its cutoff, an open one only after it
   expect(await h._getPastCutoff({ now: at(3) })).toEqual([{ gathering: confirmed, status: "CONFIRMED" }]);
-  expect(await h._getPastCutoff({ now: at(4) })).toEqual([{ gathering: confirmed, status: "CONFIRMED" }]);
-  expect(await h._getPastCutoff({ now: at(5) })).toEqual([{ gathering: confirmed, status: "CONFIRMED" }, { gathering: open, status: "OPEN" }]);
+  expect(await h._getPastCutoff({ now: at(4) })).toEqual([{ gathering: confirmed, status: "CONFIRMED" }, { gathering: booked, status: "BOOKED" }]);
+  const due = await h._getPastCutoff({ now: at(5) });
+  expect(due[0]).toEqual({ gathering: confirmed, status: "CONFIRMED" });
+  expect(due).toHaveLength(3);
+  expect(due).toContainEqual({ gathering: booked, status: "BOOKED" });
+  expect(due).toContainEqual({ gathering: open, status: "OPEN" });
 
   // expiring the open one takes it off the list
   await h.expireUnconfirmed({ gathering: open, now: at(5) });
-  expect(await h._getPastCutoff({ now: at(5) })).toEqual([{ gathering: confirmed, status: "CONFIRMED" }]);
+  expect(await h._getPastCutoff({ now: at(5) })).toHaveLength(2);
+});
+
+test("ended gatherings are the confirmed and booked ones past their end, earliest end first", async () => {
+  const { gathering: open } = await h.create(dinner);
+  const { gathering: confirmed } = await h.create({ ...dinner, endTime: at(9) });
+  const { gathering: booked } = await h.create({ ...dinner, confirmedVenue: "Oleana" });
+  await h.confirm({ gathering: confirmed, host: "noah", now: at(1) });
+  await h.confirm({ gathering: booked, host: "noah", now: at(1) });
+  await h.markBooked({ gathering: booked, host: "noah" });
+
+  expect(await h._getEnded({ now: at(7) })).toEqual([]);
+  expect(await h._getEnded({ now: at(8) })).toEqual([{ gathering: booked }]);
+  expect(await h._getEnded({ now: at(9) })).toEqual([{ gathering: booked }, { gathering: confirmed }]);
+
+  // closing one takes it off the list, and an open gathering is never on it
+  await h.closeEnded({ gathering: booked, now: at(9) });
+  expect(await h._getEnded({ now: at(9) })).toEqual([{ gathering: confirmed }]);
+  expect(await status(open)).toBe("OPEN");
 });

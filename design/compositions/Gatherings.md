@@ -16,6 +16,10 @@ Each of these takes `session` and `gathering`, resolves the host through `Sessio
 
 A host [confirms a table](reaction:Gatherings.Managing.Confirm) before its cutoff through `Hosting.confirm`, which refuses `CANNOT_CONFIRM` once the cutoff has passed or the gathering is no longer OPEN. A host [marks a table booked](reaction:Gatherings.Managing.MarkBooked) through `Hosting.markBooked` after placing the restaurant booking themselves, which refuses `CANNOT_BOOK` unless the gathering is CONFIRMED and has a venue. A host [cancels a table](reaction:Gatherings.Managing.Cancel) through `Hosting.cancel`, which refuses `CANNOT_CANCEL` once the gathering is CLOSED or CANCELLED, and `Reserving.lock` then freezes its pool so a cancelled table takes no more reservations.
 
+## Cutoff and end
+
+Nothing in a request handles time passing, so the server runs a sweep once a minute (`src/cutoffs.ts`) that calls the concept actions directly with the current time. For each gathering in `Hosting._getPastCutoff`, an OPEN one past its cutoff is closed with `Hosting.expireUnconfirmed`, and the pool of every one is frozen with `Reserving.lock` unless it is locked already, so the headcount stops changing once RSVPs close. For each gathering in `Hosting._getEnded`, `Hosting.closeEnded` closes it, which gives the host back one of their 3 active places. Every step is a conditional update, so a sweep that runs twice or on two servers changes nothing the second time.
+
 ```endpoints
 Gatherings.Creating.Create at /gatherings/create
 Gatherings.Viewing.Mine at /gatherings/mine
