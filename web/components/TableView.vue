@@ -75,15 +75,30 @@ async function loadLinks(generation = loadGeneration) {
 
 async function addLink() {
   if (actionInFlight.value) return;
+  const trimmedLabel = newLabel.value.trim();
+  if (trimmedLabel.length > 80) {
+    errorMessage.value = "Link name must be 80 characters or fewer.";
+    return;
+  }
   actionInFlight.value = true;
   try {
-    const result = await client.api.links.create({ session: getStoredSession() ?? "", gathering: tableId.value, label: newLabel.value.trim() || null });
+    const result = await client.api.links.create({
+      session: getStoredSession() ?? "",
+      gathering: tableId.value,
+      label: trimmedLabel || null,
+    });
     if ("error" in result) {
       if (result.error === "UNAUTHORIZED") {
         await handleUnauthorized();
         return;
       }
-      errorMessage.value = "Could not make a link.";
+      if (result.error === "INVALID_REQUEST") {
+        errorMessage.value = "Link name must be 80 characters or fewer.";
+      } else if (result.error === "NOT_FOUND") {
+        errorMessage.value = "Could not find this table to make a link.";
+      } else {
+        errorMessage.value = "Could not reach the server to make a link. Please try again.";
+      }
       return;
     }
     errorMessage.value = "";
@@ -372,7 +387,7 @@ async function signOut() {
         </li>
       </ul>
       <form class="row" @submit.prevent="addLink">
-        <input v-model="newLabel" class="input" placeholder="Link name, e.g. Dorm group chat" />
+        <input v-model="newLabel" class="input" maxlength="80" placeholder="Link name, e.g. Dorm group chat" />
         <button type="submit" class="btn btn-small">Make link</button>
       </form>
     </section>

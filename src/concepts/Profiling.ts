@@ -25,6 +25,7 @@ const MAX_PREFERRED_NAME_LENGTH = 80;
 const MAX_NOTES_LENGTH = 500;
 const MAX_CUISINE_LENGTH = 50;
 const MAX_CUISINES = 20;
+const MAX_WALK_PREFERENCE_MINUTES = 1440;
 
 interface ProfileDoc {
   _id: string;
@@ -118,9 +119,10 @@ export class ProfilingConcept {
       walkPreferenceMinutes !== null &&
       (typeof walkPreferenceMinutes !== "number" ||
         !Number.isFinite(walkPreferenceMinutes) ||
-        walkPreferenceMinutes <= 0)
+        walkPreferenceMinutes <= 0 ||
+        walkPreferenceMinutes > MAX_WALK_PREFERENCE_MINUTES)
     ) {
-      throw new InvalidDistance("Preferred travel time must be a positive number.");
+      throw new InvalidDistance("Preferred travel time must be a positive number up to 1440 minutes.");
     }
 
     const dietaryRestrictions = normalizeEnumSet<DietaryTag>(input.dietaryRestrictions, DIETARY_TAG_SET);

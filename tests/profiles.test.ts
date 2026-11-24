@@ -133,6 +133,13 @@ describe("Profiles endpoints and table roster access", () => {
     expect(negativeDistance.status).toBe(400);
     expect(negativeDistance.body).toEqual({ error: "INVALID_REQUEST" });
 
+    const excessiveDistance = await postJson(handler, "/api/profiles/save", {
+      session: bea.session,
+      walkPreferenceMinutes: 1441,
+    });
+    expect(excessiveDistance.status).toBe(400);
+    expect(excessiveDistance.body).toEqual({ error: "INVALID_REQUEST" });
+
     const badTag = await postJson(handler, "/api/profiles/save", {
       session: bea.session,
       dietaryRestrictions: ["PALEO"],
@@ -207,6 +214,17 @@ describe("Profiles endpoints and table roster access", () => {
     expect(afterMinimalSave.body.preferredName ?? null).toBeNull();
     expect(afterMinimalSave.body.walkPreferenceMinutes ?? null).toBeNull();
     expect(afterMinimalSave.body.notes ?? null).toBeNull();
+
+    // Saving at the 1440-minute upper boundary succeeds
+    const maxDistanceSave = await postJson(handler, "/api/profiles/save", {
+      session: bea.session,
+      walkPreferenceMinutes: 1440,
+    });
+    expect(maxDistanceSave.status).toBe(200);
+    expect(maxDistanceSave.body).toEqual({ saved: true });
+    const afterMaxDistance = await postJson(handler, "/api/profiles/me", { session: bea.session });
+    expect(afterMaxDistance.status).toBe(200);
+    expect(afterMaxDistance.body.walkPreferenceMinutes).toBe(1440);
   });
 
   test("/api/tables/profiles enforces roster access, displayName fallback, withdrawal/promotion, and table status", async () => {

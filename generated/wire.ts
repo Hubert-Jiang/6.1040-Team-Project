@@ -34,7 +34,7 @@ export type AppWire = {
       "link": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Linking"]["createLink"]>>, ["link"]>>;
       "token": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Linking"]["createLink"]>>, ["token"]>>;
     };
-    error: { error: AppWideError | "INVALID_EXPIRY" | "INVALID_INPUT" | "NOT_HOST" | "UNKNOWN_SESSION" };
+    error: { error: AppWideError | "INVALID_EXPIRY" | "INVALID_INPUT" | "INVALID_LABEL" | "NOT_HOST" | "UNKNOWN_SESSION" };
   };
   "/api/links/list": {
     input: {
@@ -143,7 +143,7 @@ export type AppWire = {
       "cutoffTime": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.computations)["parseTime"]["fn"]>[0], ["raw"]>>;
       "details"?: Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["create"]>[0], ["details"]>>;
       "endTime": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.computations)["parseTime"]["fn"]>[0], ["raw"]>>;
-      "linkLabel"?: Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Linking"]["createLink"]>[0], ["label"]>>;
+      "linkLabel"?: Jsonify<OneOf<[AtPath<Parameters<(typeof ApplicationConceptSet.computations)["isValidLabel"]["fn"]>[0], ["label"]>, AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Linking"]["createLink"]>[0], ["label"]>]>>;
       "scope"?: Jsonify<OneOf<[AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["create"]>[0], ["scope"]>, AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.computations)["hasText"]["fn"]>[0], ["value"]>, AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Authenticating"]["_hasDomain"]>[0], ["domain"]>]>]>>;
       "session": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>[0], ["session"]>>;
       "startTime": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.computations)["parseTime"]["fn"]>[0], ["raw"]>>;
@@ -158,7 +158,7 @@ export type AppWire = {
       "link": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Linking"]["createLink"]>>, ["link"]>>;
       "token": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Linking"]["createLink"]>>, ["token"]>>;
     };
-    error: { error: AppWideError | "HOST_LIMIT_REACHED" | "INVALID_CAPACITY" | "INVALID_DETAILS" | "INVALID_EXPIRY" | "INVALID_INPUT" | "INVALID_POOL" | "INVALID_SCHEDULE" | "SCOPE_MISMATCH" | "UNKNOWN_SESSION" };
+    error: { error: AppWideError | "HOST_LIMIT_REACHED" | "INVALID_CAPACITY" | "INVALID_DETAILS" | "INVALID_EXPIRY" | "INVALID_INPUT" | "INVALID_LABEL" | "INVALID_POOL" | "INVALID_SCHEDULE" | "SCOPE_MISMATCH" | "UNKNOWN_SESSION" };
   };
   "/api/tables/mine": {
     input: {
@@ -566,7 +566,7 @@ export type AppWireHttp = {
       "cutoffTime": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.computations)["parseTime"]["fn"]>[0], ["raw"]>>;
       "details"?: Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["create"]>[0], ["details"]>>;
       "endTime": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.computations)["parseTime"]["fn"]>[0], ["raw"]>>;
-      "linkLabel"?: Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Linking"]["createLink"]>[0], ["label"]>>;
+      "linkLabel"?: Jsonify<OneOf<[AtPath<Parameters<(typeof ApplicationConceptSet.computations)["isValidLabel"]["fn"]>[0], ["label"]>, AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Linking"]["createLink"]>[0], ["label"]>]>>;
       "scope"?: Jsonify<OneOf<[AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["create"]>[0], ["scope"]>, AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.computations)["hasText"]["fn"]>[0], ["value"]>, AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Authenticating"]["_hasDomain"]>[0], ["domain"]>]>]>>;
       "session": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>[0], ["session"]>>;
       "startTime": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.computations)["parseTime"]["fn"]>[0], ["raw"]>>;

@@ -40,13 +40,14 @@ Defined in [Hosting](../design/concepts/Hosting.md), line 1.
 #### Actions
 
 - `create(host: Host, title: String, startTime: DateTime, endTime: DateTime, cutoffTime: DateTime, details?: String, scope?: String, area: String, confirmedVenue?: String, now: DateTime) : returns (gathering: Gathering)`
-  - Refuses `HOST_LIMIT_REACHED`: You already have the maximum number of active unbooked gatherings.
+  - Refuses `INVALID_DETAILS`: Gathering title and area must be non-empty, title, area, scope, and confirmedVenue must be at most 100 characters, and details must be at most 300 characters.
   - Refuses `INVALID_SCHEDULE`: Gathering requires valid future cutoff, start, and end times.
-  - Refuses `INVALID_DETAILS`: A gathering needs a title and an area.
+  - Refuses `HOST_LIMIT_REACHED`: You already have the maximum number of active unbooked gatherings.
 - `confirm(gathering: Gathering, host: Host, now: DateTime) : returns ()`
   - Refuses `NOT_HOST`: Only the gathering's host can confirm it.
   - Refuses `CANNOT_CONFIRM`: This gathering can no longer be confirmed.
 - `setVenue(gathering: Gathering, confirmedVenue: String) : returns ()`
+  - Refuses `INVALID_DETAILS`: Confirmed venue must be non-empty and at most 100 characters.
 - `markBooked(gathering: Gathering, host: Host) : returns ()`
   - Refuses `NOT_HOST`: Only the gathering's host can mark it booked.
   - Refuses `CANNOT_BOOK`: Confirm the gathering and set a venue before marking it booked.
@@ -102,6 +103,7 @@ Defined in [Linking](../design/concepts/Linking.md), line 1.
 
 - `createLink(target: Target, creator: Creator, label?: String, expiresAt?: DateTime, now: DateTime) : returns (link: Link, token: String)`
   - Refuses `INVALID_EXPIRY`: Link expiration must be in the future.
+  - Refuses `INVALID_LABEL`: Link label must be 80 characters or fewer.
 - `revokeLink(link: Link, creator: Creator) : returns ()`
   - Refuses `NOT_CREATOR`: Only the link creator can revoke this link.
 - `activateLink(link: Link, creator: Creator) : returns ()`
@@ -126,7 +128,7 @@ Defined in [Profiling](../design/concepts/Profiling.md), line 1.
 #### Actions
 
 - `setProfile(user: User, preferredName?: String, dietaryRestrictions: DietaryTagSet, budgetPreferences: BudgetTierSet, walkPreferenceMinutes?: Number, cuisinePreferences: CuisineSet, notes?: String) : returns ()`
-  - Refuses `INVALID_DISTANCE`: Preferred travel time must be a positive number.
+  - Refuses `INVALID_DISTANCE`: Preferred travel time must be a positive number up to 1440 minutes.
   - Refuses `INVALID_PROFILE`: Profile contains an invalid dietary tag, budget tier, or text exceeding length limits.
 - `clearProfile(user: User) : returns ()`
 
@@ -205,9 +207,10 @@ Defined in [Sessioning](../design/concepts/Sessioning.md), line 1.
 - `buildPetrockAuthUrl(state: String) : String` — [Auth](../design/compositions/Auth.md), line 39.
 - `hasSession(session?: String) : Flag` — [Auth](../design/compositions/Auth.md), line 33.
 - `hasText(value?: String) : Flag` — [Tables](../design/compositions/Tables.md), line 52.
-- `isAcceptingGuests(status: String, locked: Flag, cutoffTime: DateTime, now: DateTime) : Flag` — [Tables](../design/compositions/Tables.md), line 58.
+- `isAcceptingGuests(status: String, locked: Flag, cutoffTime: DateTime, now: DateTime) : Flag` — [Tables](../design/compositions/Tables.md), line 61.
 - `isActiveTableStatus(status: String) : Flag` — [Profiles](../design/compositions/Profiles.md), line 33.
 - `isValidCapacity(capacity?: Number) : Flag` — [Tables](../design/compositions/Tables.md), line 55.
+- `isValidLabel(label?: String) : Flag` — [Tables](../design/compositions/Tables.md), line 58.
 - `normalizeReturnTo(raw?: String) : String` — [Auth](../design/compositions/Auth.md), line 36.
 - `now() : DateTime` — [Auth](../design/compositions/Auth.md), line 27.
 - `parseTime(raw: String) : DateTime` — [Gatherings](../design/compositions/Gatherings.md), line 33.
@@ -1181,6 +1184,8 @@ where
   earlier, RequestBoundary.request (area, capacity, confirmedVenue, cutoffTime, details, endTime, linkLabel, path: "/api/tables/create", requestId, scope, session, startTime, title)
   capacityOk is isValidCapacity (capacity)
   capacityOk is among [true]
+  labelOk is isValidLabel (label: linkLabel)
+  labelOk is among [true]
   scoped is hasText (value: scope)
   scoped is among [true]
   Authenticating._hasDomain (domain: scope, user: host) has (matches)
@@ -1247,6 +1252,8 @@ where
   earlier, RequestBoundary.request (area, capacity, confirmedVenue, cutoffTime, details, endTime, linkLabel, path: "/api/tables/create", requestId, scope, session, startTime, title)
   capacityOk is isValidCapacity (capacity)
   capacityOk is among [true]
+  labelOk is isValidLabel (label: linkLabel)
+  labelOk is among [true]
   scoped is hasText (value: scope)
   scoped is among [true]
   Authenticating._hasDomain (domain: scope, user: host) has (matches)
@@ -1271,6 +1278,24 @@ then
   RequestBoundary.respond (error: "INVALID_CAPACITY", requestId)
 ```
 
+### Tables.Hosting.CreateTable:invalid-label#2
+
+Authored path: `Tables.Hosting.CreateTable`.
+- Covered by [Tables](../design/compositions/Tables.md), line 5.
+- Covered by [Tables](../design/compositions/Tables.md), line 12.
+
+```reaction
+when Sessioning.current (now, session, subject: host), asked by Tables.Hosting.CreateTable
+where
+  earlier, RequestBoundary.request (area, capacity, confirmedVenue, cutoffTime, details, endTime, linkLabel, path: "/api/tables/create", requestId, scope, session, startTime, title)
+  capacityOk is isValidCapacity (capacity)
+  capacityOk is among [true]
+  labelOk is isValidLabel (label: linkLabel)
+  labelOk is among [false]
+then
+  RequestBoundary.respond (error: "INVALID_LABEL", requestId)
+```
+
 ### Tables.Hosting.CreateTable:open-to-anyone#2
 
 Authored path: `Tables.Hosting.CreateTable`.
@@ -1283,6 +1308,8 @@ where
   earlier, RequestBoundary.request (area, capacity, confirmedVenue, cutoffTime, details, endTime, linkLabel, path: "/api/tables/create", requestId, scope, session, startTime, title)
   capacityOk is isValidCapacity (capacity)
   capacityOk is among [true]
+  labelOk is isValidLabel (label: linkLabel)
+  labelOk is among [true]
   scoped is hasText (value: scope)
   scoped is among [false]
   start is parseTime (raw: startTime)

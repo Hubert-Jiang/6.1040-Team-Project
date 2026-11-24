@@ -102,6 +102,40 @@ test("a missing title or an out-of-order schedule is refused", async () => {
   expect(await client.api.tables.create({ session: noah.session, ...dinner, cutoffTime: "not a time" })).toEqual({ error: "INVALID_REQUEST" });
 });
 
+test("oversized gathering fields or linkLabel are refused on table create without consuming a host slot", async () => {
+  const noah = await signIn("noah@mit.edu");
+  const overLimitInputs = [
+    { linkLabel: "l".repeat(81) },
+    { title: "t".repeat(101) },
+    { area: "a".repeat(101) },
+    { confirmedVenue: "v".repeat(101) },
+    { details: "d".repeat(301) },
+  ];
+  for (const extra of overLimitInputs) {
+    expect(await client.api.tables.create({ session: noah.session, ...dinner, ...extra })).toEqual({ error: "INVALID_REQUEST" });
+  }
+
+  const longDomain = `${"s".repeat(97)}.edu`;
+  const longScopeHost = await signIn(`host@${longDomain}`);
+  expect(await client.api.tables.create({ session: longScopeHost.session, ...dinner, scope: longDomain })).toEqual({
+    error: "INVALID_REQUEST",
+  });
+
+  const mine = await client.api.tables.mine({ session: noah.session });
+  if ("error" in mine) throw new Error(mine.error);
+  expect(mine.hosted.tables).toEqual([]);
+
+  // none of the refusals consumed any of the host's 3 active slots, and trimmed boundary lengths succeed
+  for (let i = 0; i < 3; i++) {
+    await createTable(noah.session, {
+      title: `  ${"t".repeat(100)}  `,
+      area: `  ${"a".repeat(100)}  `,
+      details: `  ${"d".repeat(300)}  `,
+      linkLabel: `  ${"l".repeat(80)}  `,
+    });
+  }
+});
+
 test("a fourth active table by the same host is refused", async () => {
   const noah = await signIn("noah@mit.edu");
   for (let i = 0; i < 3; i++) await createTable(noah.session);
@@ -171,6 +205,23 @@ test("only the host can add, list, or revoke a table's links", async () => {
 
   // the refused revoke left the link working
   expect("error" in (await client.api.tables.view({ token: created.token }))).toBe(false);
+});
+
+test("creating a share link refuses labels over 80 trimmed characters and allows up to 80", async () => {
+  const noah = await signIn("noah@mit.edu");
+  const created = await createTable(noah.session, { linkLabel: "Initial" });
+
+  expect(await client.api.links.create({ session: noah.session, gathering: created.gathering, label: "x".repeat(81) })).toEqual({
+    error: "INVALID_REQUEST",
+  });
+
+  const maxLabel = "y".repeat(80);
+  const ok = await client.api.links.create({ session: noah.session, gathering: created.gathering, label: `  ${maxLabel}  ` });
+  if ("error" in ok) throw new Error(ok.error);
+
+  const listed = await client.api.links.list({ session: noah.session, gathering: created.gathering });
+  if ("error" in listed) throw new Error(listed.error);
+  expect(listed.shared.links.map((l) => l.label)).toEqual(["Initial", maxLabel]);
 });
 
 test("a host can reactivate a revoked link, restoring view and accept while keeping non-creators and bad sessions refused", async () => {

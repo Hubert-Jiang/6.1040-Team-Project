@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { createHttpClient, type HttpClientError } from "@mit-sdg/sync-engine-http/client";
 import type { Client } from "@mit-sdg/sync-engine/client";
@@ -607,11 +609,27 @@ describe("live occupancy HTTP readback", () => {
     expect(afterNullSave.budgetPreferences).toEqual([]);
     expect(afterNullSave.cuisinePreferences).toEqual([]);
 
-    // Refuses invalid walk minutes and oversized fields, and invalid sessions.
+    // Accepts upper boundary 1440 minutes and refuses invalid walk minutes and oversized fields, and invalid sessions.
+    expect(
+      await client.api.profiles.save({
+        session: alice.session,
+        walkPreferenceMinutes: 1440,
+      }),
+    ).toEqual({ saved: true });
+    const atMaxWalk = await client.api.profiles.me({ session: alice.session });
+    if ("error" in atMaxWalk) throw new Error(atMaxWalk.error);
+    expect(atMaxWalk.walkPreferenceMinutes).toBe(1440);
+
     expect(
       await client.api.profiles.save({
         session: alice.session,
         walkPreferenceMinutes: 0,
+      }),
+    ).toEqual({ error: "INVALID_REQUEST" });
+    expect(
+      await client.api.profiles.save({
+        session: alice.session,
+        walkPreferenceMinutes: 1441,
       }),
     ).toEqual({ error: "INVALID_REQUEST" });
     expect(
@@ -630,6 +648,103 @@ describe("live occupancy HTTP readback", () => {
     expect(await client.api.profiles.clear({ session: "missing-session" })).toEqual({ error: "UNAUTHORIZED" });
 
     expect(await client.api.profiles.clear({ session: alice.session })).toEqual({ cleared: true });
+  });
+
+  test("enforces input sanity limits across tables.create, gatherings.create, and links.create", async () => {
+    const host = await signIn("sanity-host@mit.edu");
+    const baseInput = {
+      session: host.session,
+      title: "Valid Title",
+      area: "Kendall Square",
+      cutoffTime: hoursFromNow(24),
+      startTime: hoursFromNow(48),
+      endTime: hoursFromNow(50),
+      capacity: 4,
+    };
+
+    expect(await client.api.tables.create({ ...baseInput, title: "t".repeat(101) })).toEqual({ error: "INVALID_REQUEST" });
+    expect(await client.api.tables.create({ ...baseInput, area: "a".repeat(101) })).toEqual({ error: "INVALID_REQUEST" });
+    expect(await client.api.tables.create({ ...baseInput, confirmedVenue: "v".repeat(101) })).toEqual({ error: "INVALID_REQUEST" });
+    expect(await client.api.tables.create({ ...baseInput, details: "d".repeat(301) })).toEqual({ error: "INVALID_REQUEST" });
+    const longDomain = `${"s".repeat(97)}.edu`;
+    const longScopeHost = await signIn(`scope-host@${longDomain}`);
+    expect(await client.api.tables.create({ ...baseInput, session: longScopeHost.session, scope: longDomain })).toEqual({
+      error: "INVALID_REQUEST",
+    });
+    expect(await client.api.tables.create({ ...baseInput, linkLabel: "l".repeat(81) })).toEqual({ error: "INVALID_REQUEST" });
+    expect(await client.api.tables.create({ ...baseInput, capacity: 0 })).toEqual({ error: "INVALID_REQUEST" });
+    expect(await client.api.tables.create({ ...baseInput, capacity: 51 })).toEqual({ error: "INVALID_REQUEST" });
+
+    expect(await client.gatherings.create({ ...baseInput, title: "t".repeat(101) })).toEqual({ error: "INVALID_REQUEST" });
+    expect(await client.gatherings.create({ ...baseInput, details: "d".repeat(301) })).toEqual({ error: "INVALID_REQUEST" });
+    expect(await client.gatherings.create({ ...baseInput, capacity: 0 })).toEqual({ error: "INVALID_REQUEST" });
+
+    const created = await client.api.tables.create({
+      ...baseInput,
+      title: "t".repeat(100),
+      area: "a".repeat(100),
+      confirmedVenue: "v".repeat(100),
+      details: "d".repeat(300),
+      linkLabel: "l".repeat(80),
+      capacity: 50,
+    });
+    if ("error" in created) throw new Error(`boundary create refused: ${created.error}`);
+
+    expect(
+      await client.api.links.create({
+        session: host.session,
+        gathering: created.gathering,
+        label: "l".repeat(81),
+      }),
+    ).toEqual({ error: "INVALID_REQUEST" });
+
+    const maxLabel = "m".repeat(80);
+    const createdLink = await client.api.links.create({
+      session: host.session,
+      gathering: created.gathering,
+      label: maxLabel,
+    });
+    if ("error" in createdLink) throw new Error(`boundary link refused: ${createdLink.error}`);
+
+    const listed = await client.api.links.list({ session: host.session, gathering: created.gathering });
+    if ("error" in listed) throw new Error(listed.error);
+    expect(listed.shared.links.some((entry) => entry.link === createdLink.link && entry.label === maxLabel)).toBe(true);
+  });
+
+  test("serves built web/dist assets cleanly and aligns Vue components with input sanity limits", async () => {
+    const indexResponse = await fetch(`http://127.0.0.1:${server!.port}/`);
+    expect(indexResponse.status).toBe(200);
+    const html = await indexResponse.text();
+    const scriptMatch = html.match(/src="(\/assets\/[^"]+\.js)"/);
+    const styleMatch = html.match(/href="(\/assets\/[^"]+\.css)"/);
+    expect(scriptMatch).not.toBeNull();
+    expect(styleMatch).not.toBeNull();
+
+    const jsResponse = await fetch(`http://127.0.0.1:${server!.port}${scriptMatch![1]}`);
+    expect(jsResponse.status).toBe(200);
+    expect(jsResponse.headers.get("content-type")).toContain("javascript");
+    const jsBody = await jsResponse.text();
+    expect(jsBody).toContain("up to 1440 minutes");
+    expect(jsBody).toContain("Link name must be 80 characters or fewer.");
+    expect(jsBody).toContain("guest spots from 1 to 50");
+
+    const cssResponse = await fetch(`http://127.0.0.1:${server!.port}${styleMatch![1]}`);
+    expect(cssResponse.status).toBe(200);
+    expect(cssResponse.headers.get("content-type")).toContain("css");
+    expect((await cssResponse.text()).length).toBeGreaterThan(0);
+
+    const webComponentsDir = path.resolve(import.meta.dir, "../web/components");
+    const homeSource = readFileSync(path.join(webComponentsDir, "HomeView.vue"), "utf8");
+    const tableSource = readFileSync(path.join(webComponentsDir, "TableView.vue"), "utf8");
+    const profileSource = readFileSync(path.join(webComponentsDir, "ProfileView.vue"), "utf8");
+
+    expect(homeSource).toContain('min="1" max="50"');
+    expect(homeSource).toContain('maxlength="100"');
+    expect(homeSource).toContain('maxlength="300"');
+    expect(tableSource).toContain('maxlength="80"');
+    expect(tableSource).toContain("Link name must be 80 characters or fewer.");
+    expect(profileSource).toContain('min="1" max="1440"');
+    expect(profileSource).toContain("Max travel time must be a positive number up to 1440 minutes.");
   });
 
   test("live table roster updates across seat accept, waitlist promotion, withdrawal, profile edits, and closes on cancel", async () => {

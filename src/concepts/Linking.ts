@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { type Collection, type Db, MongoServerError } from "mongodb";
 
 export class InvalidExpiry extends Error {}
+export class InvalidLabel extends Error {}
 export class NotCreator extends Error {}
 
 interface LinkDoc {
@@ -17,6 +18,7 @@ interface LinkDoc {
 
 // how many times createLink retries when a fresh token collides with an existing one
 const TOKEN_ATTEMPTS = 3;
+const MAX_LABEL_LENGTH = 80;
 
 /** Unguessable shareable links that resolve to a target, each one revocable on its own. */
 export class LinkingConcept {
@@ -38,7 +40,10 @@ export class LinkingConcept {
     return this.indexes;
   }
 
-  /** Returns a new active link and its token. Raises InvalidExpiry when expiresAt is not after now. */
+  /**
+   * Returns a new active link and its token. Raises InvalidExpiry when expiresAt is not after now,
+   * and InvalidLabel when trimmed label exceeds 80 characters.
+   */
   async createLink(input: { target: string; creator: string; label?: string; expiresAt?: Date; now: Date }) {
     const { target, creator, expiresAt, now } = input;
     // written so that an invalid date (NaN) fails the comparison and is refused too
@@ -46,9 +51,14 @@ export class LinkingConcept {
       throw new InvalidExpiry("Link expiration must be in the future.");
     }
 
+    const label = input.label?.trim();
+    if (label && label.length > MAX_LABEL_LENGTH) {
+      throw new InvalidLabel("Link label must be 80 characters or fewer.");
+    }
+
     // empty optional fields are left off the document, so they read back as absent
     const link: Omit<LinkDoc, "token"> = { _id: crypto.randomUUID(), target, creator, active: true, createdAt: now };
-    if (input.label?.trim()) link.label = input.label.trim();
+    if (label) link.label = label;
     if (expiresAt) link.expiresAt = expiresAt;
 
     await this.#ready();

@@ -33,25 +33,26 @@ a set of Gatherings with
   an optional confirmedVenue String
   Rule: cutoffTime <= startTime and startTime < endTime
   Rule: each Host has at most 3 Gatherings with status OPEN or CONFIRMED
+  Rule: trimmed title, area, scope, and confirmedVenue are at most 100 characters, and trimmed details is at most 300 characters
 ```
 
 ## Actions
 
 ```actions
 create(host: Host, title: String, startTime: DateTime, endTime: DateTime, cutoffTime: DateTime, details?: String, scope?: String, area: String, confirmedVenue?: String, now: DateTime) : returns (gathering: Gathering)
-  where title is non-empty and area is non-empty and now < cutoffTime and cutoffTime <= startTime and startTime < endTime and host currently has fewer than 3 Gatherings with status OPEN or CONFIRMED
+  where trimmed title is empty or trimmed area is empty or trimmed title exceeds 100 characters or trimmed area exceeds 100 characters or (confirmedVenue is present and trimmed confirmedVenue exceeds 100 characters) or (scope is present and trimmed scope exceeds 100 characters) or (details is present and trimmed details exceeds 300 characters)
+  then
+    refuses INVALID_DETAILS "Gathering title and area must be non-empty, title, area, scope, and confirmedVenue must be at most 100 characters, and details must be at most 300 characters."
+  where trimmed title is non-empty and trimmed area is non-empty and trimmed title is at most 100 characters and trimmed area is at most 100 characters and (confirmedVenue is absent or trimmed confirmedVenue is at most 100 characters) and (scope is absent or trimmed scope is at most 100 characters) and (details is absent or trimmed details is at most 300 characters) and (cutoffTime > startTime or startTime >= endTime or now >= cutoffTime)
+  then
+    refuses INVALID_SCHEDULE "Gathering requires valid future cutoff, start, and end times."
+  where trimmed title is non-empty and trimmed area is non-empty and trimmed title is at most 100 characters and trimmed area is at most 100 characters and (confirmedVenue is absent or trimmed confirmedVenue is at most 100 characters) and (scope is absent or trimmed scope is at most 100 characters) and (details is absent or trimmed details is at most 300 characters) and now < cutoffTime and cutoffTime <= startTime and startTime < endTime and host currently has 3 or more Gatherings with status OPEN or CONFIRMED
+  then
+    refuses HOST_LIMIT_REACHED "You already have the maximum number of active unbooked gatherings."
+  where trimmed title is non-empty and trimmed area is non-empty and trimmed title is at most 100 characters and trimmed area is at most 100 characters and (confirmedVenue is absent or trimmed confirmedVenue is at most 100 characters) and (scope is absent or trimmed scope is at most 100 characters) and (details is absent or trimmed details is at most 300 characters) and now < cutoffTime and cutoffTime <= startTime and startTime < endTime and host currently has fewer than 3 Gatherings with status OPEN or CONFIRMED
   then
     add a new gathering with status OPEN and the given fields
     returns gathering
-  where host currently has 3 or more Gatherings with status OPEN or CONFIRMED
-  then
-    refuses HOST_LIMIT_REACHED "You already have the maximum number of active unbooked gatherings."
-  where cutoffTime > startTime or startTime >= endTime or now >= cutoffTime
-  then
-    refuses INVALID_SCHEDULE "Gathering requires valid future cutoff, start, and end times."
-  where title is empty or area is empty
-  then
-    refuses INVALID_DETAILS "A gathering needs a title and an area."
 
 confirm(gathering: Gathering, host: Host, now: DateTime) : returns ()
   where gathering is in Gatherings and gathering's host is host and gathering's status is OPEN and now <= gathering's cutoffTime
@@ -66,7 +67,10 @@ confirm(gathering: Gathering, host: Host, now: DateTime) : returns ()
     refuses CANNOT_CONFIRM "This gathering can no longer be confirmed."
 
 setVenue(gathering: Gathering, confirmedVenue: String) : returns ()
-  where gathering is in Gatherings and gathering's status is OPEN or CONFIRMED and confirmedVenue is non-empty
+  where trimmed confirmedVenue is empty or trimmed confirmedVenue exceeds 100 characters
+  then
+    refuses INVALID_DETAILS "Confirmed venue must be non-empty and at most 100 characters."
+  where gathering is in Gatherings and (gathering's status is OPEN or gathering's status is CONFIRMED) and trimmed confirmedVenue is non-empty and trimmed confirmedVenue is at most 100 characters
   then
     set gathering's confirmedVenue to confirmedVenue
     returns

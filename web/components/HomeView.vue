@@ -15,9 +15,18 @@ const shownName = computed(() => displayName.value || authState.user?.name || au
 
 // what each refusal of a create means to the host
 const refusals: Record<string, string> = {
-  INVALID_REQUEST: "Check the title, area, and times. RSVPs have to close in the future and before the start, and the start has to come before the end.",
+  INVALID_REQUEST:
+    "Check your entries: title, area, and venue must be up to 100 characters, details up to 300 characters, guest spots from 1 to 50, and RSVPs must close in the future before the event starts and ends.",
+  INVALID_CAPACITY: "Guest spots must be a whole number from 1 to 50.",
   CONFLICT: "You already have 3 active tables. Book or cancel one first.",
   UNAUTHORIZED: "Your session ended. Sign in again.",
+};
+
+const transportErrors: Record<string, string> = {
+  NETWORK_ERROR: "Could not reach the server. Please try again.",
+  TIMEOUT: "The request timed out. Please try again.",
+  ABORTED: "The request was cancelled.",
+  INVALID_RESPONSE: "Received an unexpected response from the server.",
 };
 
 // a datetime-local field holds local time with no zone, and the server takes a full timestamp
@@ -57,27 +66,30 @@ async function createTable() {
   if (busy.value) return;
   busy.value = true;
   errorMessage.value = "";
-  const result = await client.gatherings.create({
-    session: getStoredSession() ?? "",
-    title: form.title,
-    area: form.area,
-    startTime: timestamp(form.startTime),
-    endTime: timestamp(form.endTime),
-    cutoffTime: timestamp(form.cutoffTime),
-    capacity: form.capacity,
-    confirmedVenue: form.confirmedVenue,
-    details: form.details,
-  });
-  busy.value = false;
-  if ("error" in result) {
-    if (result.error === "UNAUTHORIZED") {
-      await handleUnauthorized();
+  try {
+    const result = await client.gatherings.create({
+      session: getStoredSession() ?? "",
+      title: form.title,
+      area: form.area,
+      startTime: timestamp(form.startTime),
+      endTime: timestamp(form.endTime),
+      cutoffTime: timestamp(form.cutoffTime),
+      capacity: form.capacity,
+      confirmedVenue: form.confirmedVenue,
+      details: form.details,
+    });
+    if ("error" in result) {
+      if (result.error === "UNAUTHORIZED") {
+        await handleUnauthorized();
+        return;
+      }
+      errorMessage.value = refusals[result.error] ?? transportErrors[result.error] ?? "Could not create the table.";
       return;
     }
-    errorMessage.value = refusals[result.error] ?? "Could not create the table.";
-    return;
+    await router.push(`/tables/${result.gathering}`);
+  } finally {
+    busy.value = false;
   }
-  await router.push(`/tables/${result.gathering}`);
 }
 
 async function signOut() {
@@ -110,7 +122,7 @@ async function signOut() {
       <label class="stack">RSVPs close <input v-model="form.cutoffTime" type="datetime-local" required /></label>
       <label class="stack">Event start <input v-model="form.startTime" type="datetime-local" required /></label>
       <label class="stack">Event close <input v-model="form.endTime" type="datetime-local" required /></label>
-      <label class="stack">Guest spots <input v-model.number="form.capacity" type="number" min="1" step="1" required /></label>
+      <label class="stack">Guest spots <input v-model.number="form.capacity" type="number" min="1" max="50" step="1" required /></label>
       <label class="stack">Venue (optional) <input v-model="form.confirmedVenue" maxlength="100" /></label>
       <label class="stack">Details (optional) <input v-model="form.details" maxlength="300" /></label>
       <button type="submit" class="btn btn-primary" :disabled="busy">{{ busy ? "Creating…" : "Create table" }}</button>

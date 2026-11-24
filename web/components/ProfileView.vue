@@ -170,8 +170,8 @@ async function saveProfile() {
   let walkPreferenceMinutes: number | undefined;
   if (walkRaw.length > 0) {
     const parsed = Number(walkRaw);
-    if (!Number.isFinite(parsed)) {
-      errorMessage.value = "Max travel time must be a positive whole number of minutes.";
+    if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 1440) {
+      errorMessage.value = "Max travel time must be a positive number up to 1440 minutes.";
       return;
     }
     walkPreferenceMinutes = parsed;
@@ -195,7 +195,7 @@ async function saveProfile() {
       }
       errorMessage.value =
         result.error === "INVALID_REQUEST"
-          ? "Check your entries: travel time must be a positive whole number, preferred name up to 80 characters, and notes up to 500 characters."
+          ? "Check your entries: travel time must be a positive number up to 1440 minutes, preferred name up to 80 characters, and notes up to 500 characters."
           : "Could not reach the server. Please try again.";
       return;
     }
@@ -319,7 +319,7 @@ async function signOut() {
 
           <label class="field">
             <span>Max travel time (minutes, optional)</span>
-            <input v-model="form.walkMinutes" type="number" min="1" step="1" placeholder="e.g. 15" />
+            <input v-model="form.walkMinutes" type="number" min="1" max="1440" step="1" placeholder="e.g. 15" />
           </label>
 
           <div class="field">

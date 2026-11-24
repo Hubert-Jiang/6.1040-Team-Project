@@ -149,7 +149,7 @@ describe("ProfilingConcept", () => {
   test("refuses InvalidDistance without mutating stored state", async () => {
     const profiling = new ProfilingConcept(await testDatabase());
 
-    const badDistances = [0, -0, -5, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY];
+    const badDistances = [0, -0, -5, 1440.1, 1441, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY];
     for (const walkPreferenceMinutes of badDistances) {
       await expect(
         profiling.setProfile({
@@ -160,9 +160,19 @@ describe("ProfilingConcept", () => {
           walkPreferenceMinutes,
           cuisinePreferences: [],
         }),
-      ).rejects.toThrow(new InvalidDistance("Preferred travel time must be a positive number."));
+      ).rejects.toThrow(new InvalidDistance("Preferred travel time must be a positive number up to 1440 minutes."));
     }
     expect(await profiling._getProfile({ user: "u1" })).toEqual([]);
+
+    // Boundary valid values: 0.5 and 1440
+    await profiling.setProfile({
+      user: "u1-boundary",
+      dietaryRestrictions: [],
+      budgetPreferences: [],
+      walkPreferenceMinutes: 1440,
+      cuisinePreferences: [],
+    });
+    expect((await profiling._getProfile({ user: "u1-boundary" }))[0]?.walkPreferenceMinutes).toBe(1440);
 
     // Existing profile stays unchanged on refusal, and InvalidDistance wins when both distance and profile are invalid
     await profiling.setProfile({

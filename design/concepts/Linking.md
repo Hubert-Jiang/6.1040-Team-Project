@@ -29,6 +29,7 @@ a set of Links with
   a active Flag
   an optional expiresAt DateTime
   a createdAt DateTime
+  Rule: trimmed label, when present, is at most 80 characters
 ```
 
 ## Actions
@@ -38,7 +39,10 @@ createLink (target: Target, creator: Creator, label?: String, expiresAt?: DateTi
   where expiresAt is present and expiresAt <= now
   then
     refuses INVALID_EXPIRY "Link expiration must be in the future."
-  where expiresAt is absent or expiresAt > now
+  where (expiresAt is absent or expiresAt > now) and label is present and trimmed label exceeds 80 characters
+  then
+    refuses INVALID_LABEL "Link label must be 80 characters or fewer."
+  where (expiresAt is absent or expiresAt > now) and (label is absent or trimmed label is at most 80 characters)
   then
     generate a fresh unguessable unique token
     add a new link with token, target, creator, label, active true, expiresAt, and createdAt now
