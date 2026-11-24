@@ -731,18 +731,36 @@ describe("live occupancy HTTP readback", () => {
     const cssResponse = await fetch(`http://127.0.0.1:${server!.port}${styleMatch![1]}`);
     expect(cssResponse.status).toBe(200);
     expect(cssResponse.headers.get("content-type")).toContain("css");
-    expect((await cssResponse.text()).length).toBeGreaterThan(0);
+    const cssBody = await cssResponse.text();
+    expect(cssBody.length).toBeGreaterThan(0);
 
     const webComponentsDir = path.resolve(import.meta.dir, "../web/components");
     const homeSource = readFileSync(path.join(webComponentsDir, "HomeView.vue"), "utf8");
     const tableSource = readFileSync(path.join(webComponentsDir, "TableView.vue"), "utf8");
+    const inviteSource = readFileSync(path.join(webComponentsDir, "InviteView.vue"), "utf8");
+    const pollSource = readFileSync(path.join(webComponentsDir, "TablePoll.vue"), "utf8");
     const profileSource = readFileSync(path.join(webComponentsDir, "ProfileView.vue"), "utf8");
+
+    expect(jsBody).toContain("Location poll");
+    expect(jsBody).toContain("Suggest a spot (e.g. Flour Bakery)");
+    expect(jsBody).toContain("That location is already in the poll.");
+    expect(jsBody).toContain("Voting closed because the table's venue is already set.");
+    expect(cssBody).toContain("poll-option-main");
+    expect(cssBody).toContain("poll-vote-btn");
 
     expect(homeSource).toContain('min="1" max="50"');
     expect(homeSource).toContain('maxlength="100"');
     expect(homeSource).toContain('maxlength="300"');
     expect(tableSource).toContain('maxlength="80"');
     expect(tableSource).toContain("Link name must be 80 characters or fewer.");
+    const tableTemplate = tableSource.slice(tableSource.indexOf("<template>"));
+    const inviteTemplate = inviteSource.slice(inviteSource.indexOf("<template>"));
+    expect(tableTemplate.indexOf("<TablePoll")).toBeGreaterThan(-1);
+    expect(tableTemplate.indexOf("<TablePoll")).toBeLessThan(tableTemplate.indexOf("<TableRoster"));
+    expect(inviteTemplate.indexOf("<TablePoll")).toBeGreaterThan(-1);
+    expect(inviteTemplate.indexOf("<TablePoll")).toBeLessThan(inviteTemplate.indexOf("<TableRoster"));
+    expect(pollSource).toContain('maxlength="100"');
+    expect(pollSource).toContain('class="card poll-summary"');
     expect(profileSource).toContain('min="1" max="1440"');
     expect(profileSource).toContain("Max travel time must be a positive number up to 1440 minutes.");
   });
@@ -853,6 +871,209 @@ describe("live occupancy HTTP readback", () => {
     const controller = new AbortController();
     controller.abort();
     const aborted = await client.api.profiles.me({ session: "any" }, { signal: controller.signal });
+    expect("error" in aborted).toBe(true);
+    if ("error" in aborted) {
+      expect(aborted.error).toBe("ABORTED");
+    }
+  });
+
+  test("live table location poll supports proposals, voting, withdrawal vote cleanup, host choose-venue, and refusals", async () => {
+    const host = await signIn("poll-host@mit.edu");
+    const guestA = await signIn("poll-guesta@mit.edu");
+    const guestB = await signIn("poll-guestb@mit.edu");
+    const outsider = await signIn("poll-outsider@mit.edu");
+
+    const table = await createTable(host.session, 1);
+
+    // Initially open and empty for host; outsider and missing session/table are refused.
+    const initialPoll = await client.api.tables.poll({ session: host.session, gathering: table.gathering });
+    if ("error" in initialPoll) throw new Error(initialPoll.error);
+    expect(initialPoll.open).toBe(true);
+    expect(initialPoll.confirmedVenue ?? null).toBeNull();
+    expect(initialPoll.hosting).toBe(true);
+    expect(initialPoll.votedOption).toBeNull();
+    expect(initialPoll.options).toEqual([]);
+    expect(await client.api.tables.poll({ session: outsider.session, gathering: table.gathering })).toEqual({
+      error: "FORBIDDEN",
+    });
+    expect(await client.api.tables.poll({ session: "missing-session", gathering: table.gathering })).toEqual({
+      error: "UNAUTHORIZED",
+    });
+    expect(await client.api.tables.poll({ session: host.session, gathering: "missing-gathering" })).toEqual({
+      error: "NOT_FOUND",
+    });
+
+    // Guest A accepts the single seat; Guest B joins the waitlist.
+    const acceptA = await client.api.tables.accept({ session: guestA.session, token: table.token });
+    if ("error" in acceptA) throw new Error(acceptA.error);
+    const acceptB = await client.api.tables.accept({ session: guestB.session, token: table.token });
+    if ("error" in acceptB) throw new Error(acceptB.error);
+    expect(acceptB.place.position).toBe(1);
+
+    // Waitlisted Guest B cannot view or mutate the poll.
+    expect(await client.api.tables.poll({ session: guestB.session, gathering: table.gathering })).toEqual({
+      error: "FORBIDDEN",
+    });
+    expect(
+      await client.api.tables.poll.add({ session: guestB.session, gathering: table.gathering, label: "Veggie Galaxy" }),
+    ).toEqual({ error: "FORBIDDEN" });
+
+    // Seated Guest A adds an option and votes for it; Host adds another option.
+    const addedFlour = await client.api.tables.poll.add({
+      session: guestA.session,
+      gathering: table.gathering,
+      label: "Flour Bakery",
+    });
+    if ("error" in addedFlour) throw new Error(addedFlour.error);
+    expect(await client.api.tables.poll.vote({ session: guestA.session, gathering: table.gathering, option: addedFlour.option })).toEqual({
+      voted: true,
+    });
+
+    const addedTatte = await client.api.tables.poll.add({
+      session: host.session,
+      gathering: table.gathering,
+      label: "Tatte",
+    });
+    if ("error" in addedTatte) throw new Error(addedTatte.error);
+
+    // Validation and duplicate refusals.
+    expect(await client.api.tables.poll.add({ session: host.session, gathering: table.gathering, label: "   " })).toEqual({
+      error: "INVALID_REQUEST",
+    });
+    expect(
+      await client.api.tables.poll.add({ session: host.session, gathering: table.gathering, label: "flour bakery" }),
+    ).toEqual({ error: "CONFLICT" });
+
+    // Guest A sees canRemove=true only for their own option; cannot remove host's option.
+    const pollForGuestA = await client.api.tables.poll({ session: guestA.session, gathering: table.gathering });
+    if ("error" in pollForGuestA) throw new Error(pollForGuestA.error);
+    expect(pollForGuestA.open).toBe(true);
+    expect(pollForGuestA.confirmedVenue ?? null).toBeNull();
+    expect(pollForGuestA.hosting).toBe(false);
+    expect(pollForGuestA.votedOption).toBe(addedFlour.option);
+    expect(pollForGuestA.options).toEqual([
+      { option: addedFlour.option, label: "Flour Bakery", voteCount: 1, canRemove: true },
+      { option: addedTatte.option, label: "Tatte", voteCount: 0, canRemove: false },
+    ]);
+    expect(
+      await client.api.tables.poll.remove({ session: guestA.session, gathering: table.gathering, option: addedTatte.option }),
+    ).toEqual({ error: "FORBIDDEN" });
+
+    // Host votes Tatte, switches to Flour Bakery, then clears vote.
+    expect(await client.api.tables.poll.vote({ session: host.session, gathering: table.gathering, option: addedTatte.option })).toEqual({
+      voted: true,
+    });
+    expect(await client.api.tables.poll.vote({ session: host.session, gathering: table.gathering, option: addedFlour.option })).toEqual({
+      voted: true,
+    });
+    const hostBothVoted = await client.api.tables.poll({ session: host.session, gathering: table.gathering });
+    if ("error" in hostBothVoted) throw new Error(hostBothVoted.error);
+    expect(hostBothVoted.votedOption).toBe(addedFlour.option);
+    expect(hostBothVoted.options.map((o) => [o.label, o.voteCount, o.canRemove])).toEqual([
+      ["Flour Bakery", 2, true],
+      ["Tatte", 0, true],
+    ]);
+
+    expect(await client.api.tables.poll.unvote({ session: host.session, gathering: table.gathering })).toEqual({ cleared: true });
+
+    // Guest A withdraws: Guest A's vote is cleared by reaction, Guest A loses poll access, Guest B is promoted and gains poll access.
+    expect(await client.api.tables.withdraw({ session: guestA.session, gathering: table.gathering })).toEqual({ withdrawn: true });
+    expect(await client.api.tables.poll({ session: guestA.session, gathering: table.gathering })).toEqual({
+      error: "FORBIDDEN",
+    });
+
+    const pollForGuestB = await client.api.tables.poll({ session: guestB.session, gathering: table.gathering });
+    if ("error" in pollForGuestB) throw new Error(pollForGuestB.error);
+    expect(pollForGuestB.open).toBe(true);
+    expect(pollForGuestB.votedOption).toBeNull();
+    expect(pollForGuestB.options.map((o) => [o.label, o.voteCount, o.canRemove])).toEqual([
+      ["Flour Bakery", 1 - 1, false],
+      ["Tatte", 0, false],
+    ]);
+
+    // Guest B cannot pick the venue; host picks Flour Bakery, closing the poll and updating table views.
+    expect(
+      await client.api.tables.poll["choose-venue"]({
+        session: guestB.session,
+        gathering: table.gathering,
+        option: addedFlour.option,
+      }),
+    ).toEqual({ error: "NOT_FOUND" });
+
+    expect(
+      await client.api.tables.poll["choose-venue"]({
+        session: host.session,
+        gathering: table.gathering,
+        option: addedFlour.option,
+      }),
+    ).toEqual({ confirmedVenue: "Flour Bakery" });
+
+    const updatedHostTable = await client.gatherings.view({ session: host.session, gathering: table.gathering });
+    if ("error" in updatedHostTable) throw new Error(updatedHostTable.error);
+    expect(updatedHostTable.confirmedVenue).toBe("Flour Bakery");
+
+    const updatedPublicTable = await client.api.tables.view({ token: table.token });
+    if ("error" in updatedPublicTable) throw new Error(updatedPublicTable.error);
+    expect(updatedPublicTable.confirmedVenue).toBe("Flour Bakery");
+
+    const closedPoll = await client.api.tables.poll({ session: guestB.session, gathering: table.gathering });
+    if ("error" in closedPoll) throw new Error(closedPoll.error);
+    expect(closedPoll.open).toBe(false);
+    expect(closedPoll.confirmedVenue).toBe("Flour Bakery");
+    expect(closedPoll.options).toHaveLength(2);
+
+    // Poll mutations fail with CONFLICT once venue is set.
+    expect(await client.api.tables.poll.add({ session: host.session, gathering: table.gathering, label: "Area Four" })).toEqual({
+      error: "CONFLICT",
+    });
+    expect(
+      await client.api.tables.poll.vote({ session: guestB.session, gathering: table.gathering, option: addedTatte.option }),
+    ).toEqual({ error: "CONFLICT" });
+    expect(await client.api.tables.poll.unvote({ session: host.session, gathering: table.gathering })).toEqual({
+      error: "CONFLICT",
+    });
+    expect(
+      await client.api.tables.poll.remove({ session: host.session, gathering: table.gathering, option: addedTatte.option }),
+    ).toEqual({ error: "CONFLICT" });
+    expect(
+      await client.api.tables.poll["choose-venue"]({
+        session: host.session,
+        gathering: table.gathering,
+        option: addedTatte.option,
+      }),
+    ).toEqual({ error: "CONFLICT" });
+
+    // Table created with a pre-set confirmedVenue starts closed with 0 options.
+    const presetCreated = await client.api.tables.create({
+      session: host.session,
+      title: "Preset Venue Table",
+      area: "Kendall Square",
+      cutoffTime: hoursFromNow(24),
+      startTime: hoursFromNow(48),
+      endTime: hoursFromNow(50),
+      capacity: 3,
+      confirmedVenue: "Oleana",
+    });
+    if ("error" in presetCreated) throw new Error(presetCreated.error);
+    expect(await client.api.tables.poll({ session: host.session, gathering: presetCreated.gathering })).toEqual({
+      open: false,
+      confirmedVenue: "Oleana",
+      hosting: true,
+      votedOption: null,
+      options: [],
+    });
+
+    // Cancelling a table makes poll return CONFLICT (TABLE_INACTIVE).
+    expect(await client.gatherings.cancel({ session: host.session, gathering: table.gathering })).toEqual({});
+    expect(await client.api.tables.poll({ session: host.session, gathering: table.gathering })).toEqual({
+      error: "CONFLICT",
+    });
+  });
+
+  test("returns transport fault union when poll request is aborted", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const aborted = await client.api.tables.poll({ session: "any", gathering: "any" }, { signal: controller.signal });
     expect("error" in aborted).toBe(true);
     if ("error" in aborted) {
       expect(aborted.error).toBe("ABORTED");

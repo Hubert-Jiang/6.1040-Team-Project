@@ -3,6 +3,7 @@ import {
   CannotBook,
   CannotCancel,
   CannotConfirm,
+  CannotSetVenue,
   HostingConcept,
   HostLimitReached,
   InvalidDetails,
@@ -208,4 +209,44 @@ test("setVenue enforces non-empty trimmed length up to 100 characters", async ()
 
   await expect(h.setVenue({ gathering, confirmedVenue: `  ${"v".repeat(100)}  ` })).resolves.toEqual({});
   expect((await h._getDetails({ gathering }))[0]?.confirmedVenue).toBe("v".repeat(100));
+});
+
+test("setVenue succeeds on OPEN and CONFIRMED gatherings and refuses missing, BOOKED, CLOSED, or CANCELLED gatherings", async () => {
+  const { gathering: openG } = await h.create(dinner);
+  expect(await h.setVenue({ gathering: openG, confirmedVenue: "  Sarma  " })).toEqual({});
+  expect((await h._getDetails({ gathering: openG }))[0]?.confirmedVenue).toBe("Sarma");
+
+  // Works on CONFIRMED gatherings too
+  await h.confirm({ gathering: openG, host: "noah", now: at(1) });
+  expect(await h.setVenue({ gathering: openG, confirmedVenue: "Oleana" })).toEqual({});
+  expect((await h._getDetails({ gathering: openG }))[0]?.confirmedVenue).toBe("Oleana");
+
+  // Refuses BOOKED gatherings without mutating confirmedVenue
+  await h.markBooked({ gathering: openG, host: "noah" });
+  await expect(h.setVenue({ gathering: openG, confirmedVenue: "Pammy's" })).rejects.toBeInstanceOf(CannotSetVenue);
+  expect((await h._getDetails({ gathering: openG }))[0]?.confirmedVenue).toBe("Oleana");
+
+  // Refuses CLOSED gatherings without mutating confirmedVenue
+  await h.closeEnded({ gathering: openG, now: at(8) });
+  await expect(h.setVenue({ gathering: openG, confirmedVenue: "Pammy's" })).rejects.toBeInstanceOf(CannotSetVenue);
+  expect((await h._getDetails({ gathering: openG }))[0]?.confirmedVenue).toBe("Oleana");
+
+  // Refuses expired OPEN gatherings (CLOSED)
+  const { gathering: expiredG } = await h.create(dinner);
+  await h.expireUnconfirmed({ gathering: expiredG, now: at(5) });
+  await expect(h.setVenue({ gathering: expiredG, confirmedVenue: "Oleana" })).rejects.toBeInstanceOf(CannotSetVenue);
+  expect((await h._getDetails({ gathering: expiredG }))[0]?.confirmedVenue).toBeUndefined();
+
+  // Refuses CANCELLED gatherings without mutating confirmedVenue
+  const { gathering: cancelledG } = await h.create({ ...dinner, confirmedVenue: "Initial" });
+  await h.cancel({ gathering: cancelledG, host: "noah", now: at(1) });
+  await expect(h.setVenue({ gathering: cancelledG, confirmedVenue: "Updated" })).rejects.toBeInstanceOf(CannotSetVenue);
+  expect((await h._getDetails({ gathering: cancelledG }))[0]?.confirmedVenue).toBe("Initial");
+
+  // Refuses missing gatherings
+  await expect(h.setVenue({ gathering: "missing-id", confirmedVenue: "Oleana" })).rejects.toBeInstanceOf(CannotSetVenue);
+
+  // InvalidDetails takes precedence over CannotSetVenue
+  await expect(h.setVenue({ gathering: "missing-id", confirmedVenue: "   " })).rejects.toBeInstanceOf(InvalidDetails);
+  await expect(h.setVenue({ gathering: openG, confirmedVenue: "v".repeat(101) })).rejects.toBeInstanceOf(InvalidDetails);
 });

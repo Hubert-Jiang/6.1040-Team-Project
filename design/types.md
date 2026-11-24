@@ -20,4 +20,7 @@ instantiate Inviting with
   Guest is Authenticating.User
 instantiate Profiling with
   User is Authenticating.User
+instantiate Polling with
+  Scope is Hosting.Gathering
+  Participant is Authenticating.User
 ```

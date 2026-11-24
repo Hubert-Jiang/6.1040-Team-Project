@@ -14,6 +14,7 @@ export default {
       new URL("./design/compositions/Tables.md", import.meta.url),
       new URL("./design/compositions/Gatherings.md", import.meta.url),
       new URL("./design/compositions/Profiles.md", import.meta.url),
+      new URL("./design/compositions/Polls.md", import.meta.url),
     ],
   },
   projections: [httpWire({ policy: appHttpPolicy, name: "AppWireHttp" })],

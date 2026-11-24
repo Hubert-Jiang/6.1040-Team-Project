@@ -48,6 +48,7 @@ Defined in [Hosting](../design/concepts/Hosting.md), line 1.
   - Refuses `CANNOT_CONFIRM`: This gathering can no longer be confirmed.
 - `setVenue(gathering: Gathering, confirmedVenue: String) : returns ()`
   - Refuses `INVALID_DETAILS`: Confirmed venue must be non-empty and at most 100 characters.
+  - Refuses `CANNOT_SET_VENUE`: Venue can only be set on an open or confirmed gathering.
 - `markBooked(gathering: Gathering, host: Host) : returns ()`
   - Refuses `NOT_HOST`: Only the gathering's host can mark it booked.
   - Refuses `CANNOT_BOOK`: Confirm the gathering and set a venue before marking it booked.
@@ -120,6 +121,35 @@ Defined in [Linking](../design/concepts/Linking.md), line 1.
 - `Linking` — instance of `Linking` — [Application Types and Instances](../design/types.md), line 15.
   - `Creator` is `Authenticating.User` — [Application Types and Instances](../design/types.md), line 17.
   - `Target` is `Hosting.Gathering` — [Application Types and Instances](../design/types.md), line 16.
+
+### Polling
+
+Defined in [Polling](../design/concepts/Polling.md), line 1.
+
+#### Actions
+
+- `addOption(scope: Scope, label: String, proposedBy: Participant, now: DateTime) : returns (option: Option)`
+  - Refuses `INVALID_OPTION`: Poll option label must be between 1 and 100 non-whitespace characters.
+  - Refuses `DUPLICATE_OPTION`: An option with that name already exists in this poll.
+  - Refuses `OPTION_LIMIT_REACHED`: A poll can have at most 20 options.
+- `castVote(scope: Scope, option: Option, voter: Participant) : returns ()`
+  - Refuses `NO_SUCH_OPTION`: Poll option not found in this scope.
+- `clearVote(scope: Scope, voter: Participant) : returns ()`
+- `removeOption(scope: Scope, option: Option) : returns ()`
+  - Refuses `NO_SUCH_OPTION`: Poll option not found in this scope.
+
+#### Queries
+
+- `_listOptions(scope: Scope) : many (option: Option, label: String, proposedBy: Participant, createdAt: DateTime)`
+- `_getOption(option: Option) : optional (scope: Scope, label: String, proposedBy: Participant)`
+- `_getVoteCount(option: Option) : one (voteCount: Number)`
+- `_getVote(scope: Scope, voter: Participant) : optional (option: Option)`
+
+#### Instances
+
+- `Polling` — instance of `Polling` — [Application Types and Instances](../design/types.md), line 23.
+  - `Participant` is `Authenticating.User` — [Application Types and Instances](../design/types.md), line 25.
+  - `Scope` is `Hosting.Gathering` — [Application Types and Instances](../design/types.md), line 24.
 
 ### Profiling
 
@@ -205,12 +235,15 @@ Defined in [Sessioning](../design/concepts/Sessioning.md), line 1.
 ## Computations
 
 - `buildPetrockAuthUrl(state: String) : String` — [Auth](../design/compositions/Auth.md), line 39.
+- `canRemovePollOption(hosting: Flag, proposedBy: String, viewer: String) : Flag` — [Polls](../design/compositions/Polls.md), line 47.
 - `hasSession(session?: String) : Flag` — [Auth](../design/compositions/Auth.md), line 33.
 - `hasText(value?: String) : Flag` — [Tables](../design/compositions/Tables.md), line 52.
 - `isAcceptingGuests(status: String, locked: Flag, cutoffTime: DateTime, now: DateTime) : Flag` — [Tables](../design/compositions/Tables.md), line 61.
 - `isActiveTableStatus(status: String) : Flag` — [Profiles](../design/compositions/Profiles.md), line 33.
+- `isPollOpen(status: String, confirmedVenue?: String) : Flag` — [Polls](../design/compositions/Polls.md), line 44.
 - `isValidCapacity(capacity?: Number) : Flag` — [Tables](../design/compositions/Tables.md), line 55.
 - `isValidLabel(label?: String) : Flag` — [Tables](../design/compositions/Tables.md), line 58.
+- `matchesUser(a: String, b: String) : Flag` — [Polls](../design/compositions/Polls.md), line 41.
 - `normalizeReturnTo(raw?: String) : String` — [Auth](../design/compositions/Auth.md), line 36.
 - `now() : DateTime` — [Auth](../design/compositions/Auth.md), line 27.
 - `parseTime(raw: String) : DateTime` — [Gatherings](../design/compositions/Gatherings.md), line 33.
@@ -311,6 +344,23 @@ Former "the host's tables" — inputs (host); bindings (gathering, title, status
         startTime
         status
         title
+```
+
+### the poll options
+
+Authored path: `Polls.Viewing.PollOptions`.
+- Covered by [Polls](../design/compositions/Polls.md), line 7.
+
+```former
+Former "the poll options" — inputs (gathering, hosting, viewer); bindings (option, label, proposedBy, voteCount, canRemove); promises exactly one record — forms:
+  each Polling._listOptions (scope: gathering) has (label, option, proposedBy)
+    where Polling._getVoteCount (option) has (voteCount)
+    where canRemove is canRemovePollOption (hosting, proposedBy, viewer)
+    form a record of
+      canRemove
+      label
+      option
+      voteCount
 ```
 
 ### the seated tablemates
@@ -906,6 +956,1106 @@ where
   Reserving._getAvailability (resource: gathering) has (capacity, locked, remaining, reservedCount, waitlistCount)
 then
   RequestBoundary.respond (area, capacity, confirmedVenue, cutoffTime, details, endTime, locked, remaining, requestId, reservedCount, startTime, status, title, waitlistCount)
+```
+
+### Polls.Clearing.ClearVoteOnSeatCancel
+
+Authored path: `Polls.Clearing.ClearVoteOnSeatCancel`.
+- Covered by [Polls](../design/compositions/Polls.md), line 36.
+
+```reaction
+when Reserving.cancel (resource: gathering, user)
+then
+  Polling.clearVote (scope: gathering, voter: user)
+```
+
+### Polls.Editing.AddOption
+
+Authored path: `Polls.Editing.AddOption`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 20.
+
+```reaction
+when RequestBoundary.request (gathering, label, path: "/api/tables/poll/add", requestId, session)
+where
+  now is now
+then
+  Sessioning.current (now, session)
+```
+
+### Polls.Editing.AddOption:host-open#2
+
+Authored path: `Polls.Editing.AddOption`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 20.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Editing.AddOption
+where
+  earlier, RequestBoundary.request (gathering, label, path: "/api/tables/poll/add", requestId, session)
+  Hosting._getDetails (gathering) has (host, status)
+  active is isActiveTableStatus (status)
+  active is among [true]
+  hosting is matchesUser (a: host, b: viewer)
+  hosting is among [true]
+  whether Hosting._getDetails (gathering) has (confirmedVenue)
+  pollOpen is isPollOpen (confirmedVenue, status)
+  pollOpen is among [true]
+then
+  Polling.addOption (label, now, proposedBy: viewer, scope: gathering)
+```
+
+### Polls.Editing.AddOption:host-open#3
+
+Authored path: `Polls.Editing.AddOption`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 20.
+
+```reaction
+when Polling.addOption (label, now, proposedBy: viewer, scope: gathering, option), asked by Polls.Editing.AddOption:host-open#2
+where
+  earlier, RequestBoundary.request (gathering, label, path: "/api/tables/poll/add", requestId, session)
+then
+  RequestBoundary.respond (option, requestId)
+```
+
+### Polls.Editing.AddOption:no-such-table#2
+
+Authored path: `Polls.Editing.AddOption`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 20.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Editing.AddOption
+where
+  earlier, RequestBoundary.request (gathering, label, path: "/api/tables/poll/add", requestId, session)
+  no Hosting._getDetails (gathering)
+then
+  RequestBoundary.respond (error: "NO_SUCH_TABLE", requestId)
+```
+
+### Polls.Editing.AddOption:not-participant#2
+
+Authored path: `Polls.Editing.AddOption`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 20.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Editing.AddOption
+where
+  earlier, RequestBoundary.request (gathering, label, path: "/api/tables/poll/add", requestId, session)
+  Hosting._getDetails (gathering) has (host, status)
+  active is isActiveTableStatus (status)
+  active is among [true]
+  hosting is matchesUser (a: host, b: viewer)
+  hosting is among [false]
+  Reserving._hasReservation (resource: gathering, user: viewer) has (reserved)
+  reserved is among [false]
+then
+  RequestBoundary.respond (error: "NOT_PARTICIPANT", requestId)
+```
+
+### Polls.Editing.AddOption:poll-closed-host#2
+
+Authored path: `Polls.Editing.AddOption`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 20.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Editing.AddOption
+where
+  earlier, RequestBoundary.request (gathering, label, path: "/api/tables/poll/add", requestId, session)
+  Hosting._getDetails (gathering) has (host, status)
+  active is isActiveTableStatus (status)
+  active is among [true]
+  hosting is matchesUser (a: host, b: viewer)
+  hosting is among [true]
+  whether Hosting._getDetails (gathering) has (confirmedVenue)
+  pollOpen is isPollOpen (confirmedVenue, status)
+  pollOpen is among [false]
+then
+  RequestBoundary.respond (error: "POLL_CLOSED", requestId)
+```
+
+### Polls.Editing.AddOption:poll-closed-seated#2
+
+Authored path: `Polls.Editing.AddOption`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 20.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Editing.AddOption
+where
+  earlier, RequestBoundary.request (gathering, label, path: "/api/tables/poll/add", requestId, session)
+  Hosting._getDetails (gathering) has (host, status)
+  active is isActiveTableStatus (status)
+  active is among [true]
+  hosting is matchesUser (a: host, b: viewer)
+  hosting is among [false]
+  Reserving._hasReservation (resource: gathering, user: viewer) has (reserved)
+  reserved is among [true]
+  whether Hosting._getDetails (gathering) has (confirmedVenue)
+  pollOpen is isPollOpen (confirmedVenue, status)
+  pollOpen is among [false]
+then
+  RequestBoundary.respond (error: "POLL_CLOSED", requestId)
+```
+
+### Polls.Editing.AddOption:seated-open#2
+
+Authored path: `Polls.Editing.AddOption`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 20.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Editing.AddOption
+where
+  earlier, RequestBoundary.request (gathering, label, path: "/api/tables/poll/add", requestId, session)
+  Hosting._getDetails (gathering) has (host, status)
+  active is isActiveTableStatus (status)
+  active is among [true]
+  hosting is matchesUser (a: host, b: viewer)
+  hosting is among [false]
+  Reserving._hasReservation (resource: gathering, user: viewer) has (reserved)
+  reserved is among [true]
+  whether Hosting._getDetails (gathering) has (confirmedVenue)
+  pollOpen is isPollOpen (confirmedVenue, status)
+  pollOpen is among [true]
+then
+  Polling.addOption (label, now, proposedBy: viewer, scope: gathering)
+```
+
+### Polls.Editing.AddOption:seated-open#3
+
+Authored path: `Polls.Editing.AddOption`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 20.
+
+```reaction
+when Polling.addOption (label, now, proposedBy: viewer, scope: gathering, option), asked by Polls.Editing.AddOption:seated-open#2
+where
+  earlier, RequestBoundary.request (gathering, label, path: "/api/tables/poll/add", requestId, session)
+then
+  RequestBoundary.respond (option, requestId)
+```
+
+### Polls.Editing.AddOption:table-inactive#2
+
+Authored path: `Polls.Editing.AddOption`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 20.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Editing.AddOption
+where
+  earlier, RequestBoundary.request (gathering, label, path: "/api/tables/poll/add", requestId, session)
+  Hosting._getDetails (gathering) has (status)
+  active is isActiveTableStatus (status)
+  active is among [false]
+then
+  RequestBoundary.respond (error: "TABLE_INACTIVE", requestId)
+```
+
+### Polls.Editing.RemoveOption
+
+Authored path: `Polls.Editing.RemoveOption`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 23.
+
+```reaction
+when RequestBoundary.request (gathering, option, path: "/api/tables/poll/remove", requestId, session)
+where
+  now is now
+then
+  Sessioning.current (now, session)
+```
+
+### Polls.Editing.RemoveOption:no-such-option-host#2
+
+Authored path: `Polls.Editing.RemoveOption`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 23.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Editing.RemoveOption
+where
+  earlier, RequestBoundary.request (gathering, option, path: "/api/tables/poll/remove", requestId, session)
+  Hosting._getDetails (gathering) has (host, status)
+  active is isActiveTableStatus (status)
+  active is among [true]
+  hosting is matchesUser (a: host, b: viewer)
+  hosting is among [true]
+  whether Hosting._getDetails (gathering) has (confirmedVenue)
+  pollOpen is isPollOpen (confirmedVenue, status)
+  pollOpen is among [true]
+  no Polling._getOption (option) has (scope: gathering)
+then
+  RequestBoundary.respond (error: "NO_SUCH_OPTION", requestId)
+```
+
+### Polls.Editing.RemoveOption:no-such-option-seated#2
+
+Authored path: `Polls.Editing.RemoveOption`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 23.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Editing.RemoveOption
+where
+  earlier, RequestBoundary.request (gathering, option, path: "/api/tables/poll/remove", requestId, session)
+  Hosting._getDetails (gathering) has (host, status)
+  active is isActiveTableStatus (status)
+  active is among [true]
+  hosting is matchesUser (a: host, b: viewer)
+  hosting is among [false]
+  Reserving._hasReservation (resource: gathering, user: viewer) has (reserved)
+  reserved is among [true]
+  whether Hosting._getDetails (gathering) has (confirmedVenue)
+  pollOpen is isPollOpen (confirmedVenue, status)
+  pollOpen is among [true]
+  no Polling._getOption (option) has (scope: gathering)
+then
+  RequestBoundary.respond (error: "NO_SUCH_OPTION", requestId)
+```
+
+### Polls.Editing.RemoveOption:no-such-table#2
+
+Authored path: `Polls.Editing.RemoveOption`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 23.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Editing.RemoveOption
+where
+  earlier, RequestBoundary.request (gathering, option, path: "/api/tables/poll/remove", requestId, session)
+  no Hosting._getDetails (gathering)
+then
+  RequestBoundary.respond (error: "NO_SUCH_TABLE", requestId)
+```
+
+### Polls.Editing.RemoveOption:not-authorized#2
+
+Authored path: `Polls.Editing.RemoveOption`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 23.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Editing.RemoveOption
+where
+  earlier, RequestBoundary.request (gathering, option, path: "/api/tables/poll/remove", requestId, session)
+  Hosting._getDetails (gathering) has (host, status)
+  active is isActiveTableStatus (status)
+  active is among [true]
+  hosting is matchesUser (a: host, b: viewer)
+  hosting is among [false]
+  Reserving._hasReservation (resource: gathering, user: viewer) has (reserved)
+  reserved is among [true]
+  whether Hosting._getDetails (gathering) has (confirmedVenue)
+  pollOpen is isPollOpen (confirmedVenue, status)
+  pollOpen is among [true]
+  Polling._getOption (option) has (proposedBy, scope: gathering)
+  canRemove is canRemovePollOption (hosting, proposedBy, viewer)
+  canRemove is among [false]
+then
+  RequestBoundary.respond (error: "NOT_AUTHORIZED", requestId)
+```
+
+### Polls.Editing.RemoveOption:not-participant#2
+
+Authored path: `Polls.Editing.RemoveOption`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 23.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Editing.RemoveOption
+where
+  earlier, RequestBoundary.request (gathering, option, path: "/api/tables/poll/remove", requestId, session)
+  Hosting._getDetails (gathering) has (host, status)
+  active is isActiveTableStatus (status)
+  active is among [true]
+  hosting is matchesUser (a: host, b: viewer)
+  hosting is among [false]
+  Reserving._hasReservation (resource: gathering, user: viewer) has (reserved)
+  reserved is among [false]
+then
+  RequestBoundary.respond (error: "NOT_PARTICIPANT", requestId)
+```
+
+### Polls.Editing.RemoveOption:poll-closed-host#2
+
+Authored path: `Polls.Editing.RemoveOption`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 23.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Editing.RemoveOption
+where
+  earlier, RequestBoundary.request (gathering, option, path: "/api/tables/poll/remove", requestId, session)
+  Hosting._getDetails (gathering) has (host, status)
+  active is isActiveTableStatus (status)
+  active is among [true]
+  hosting is matchesUser (a: host, b: viewer)
+  hosting is among [true]
+  whether Hosting._getDetails (gathering) has (confirmedVenue)
+  pollOpen is isPollOpen (confirmedVenue, status)
+  pollOpen is among [false]
+then
+  RequestBoundary.respond (error: "POLL_CLOSED", requestId)
+```
+
+### Polls.Editing.RemoveOption:poll-closed-seated#2
+
+Authored path: `Polls.Editing.RemoveOption`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 23.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Editing.RemoveOption
+where
+  earlier, RequestBoundary.request (gathering, option, path: "/api/tables/poll/remove", requestId, session)
+  Hosting._getDetails (gathering) has (host, status)
+  active is isActiveTableStatus (status)
+  active is among [true]
+  hosting is matchesUser (a: host, b: viewer)
+  hosting is among [false]
+  Reserving._hasReservation (resource: gathering, user: viewer) has (reserved)
+  reserved is among [true]
+  whether Hosting._getDetails (gathering) has (confirmedVenue)
+  pollOpen is isPollOpen (confirmedVenue, status)
+  pollOpen is among [false]
+then
+  RequestBoundary.respond (error: "POLL_CLOSED", requestId)
+```
+
+### Polls.Editing.RemoveOption:remove-host#2
+
+Authored path: `Polls.Editing.RemoveOption`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 23.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Editing.RemoveOption
+where
+  earlier, RequestBoundary.request (gathering, option, path: "/api/tables/poll/remove", requestId, session)
+  Hosting._getDetails (gathering) has (host, status)
+  active is isActiveTableStatus (status)
+  active is among [true]
+  hosting is matchesUser (a: host, b: viewer)
+  hosting is among [true]
+  whether Hosting._getDetails (gathering) has (confirmedVenue)
+  pollOpen is isPollOpen (confirmedVenue, status)
+  pollOpen is among [true]
+  Polling._getOption (option) has (proposedBy, scope: gathering)
+  canRemove is canRemovePollOption (hosting, proposedBy, viewer)
+  canRemove is among [true]
+then
+  Polling.removeOption (option, scope: gathering)
+```
+
+### Polls.Editing.RemoveOption:remove-host#3
+
+Authored path: `Polls.Editing.RemoveOption`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 23.
+
+```reaction
+when Polling.removeOption (option, scope: gathering), asked by Polls.Editing.RemoveOption:remove-host#2
+where
+  earlier, RequestBoundary.request (gathering, option, path: "/api/tables/poll/remove", requestId, session)
+then
+  RequestBoundary.respond (removed: true, requestId)
+```
+
+### Polls.Editing.RemoveOption:remove-seated#2
+
+Authored path: `Polls.Editing.RemoveOption`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 23.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Editing.RemoveOption
+where
+  earlier, RequestBoundary.request (gathering, option, path: "/api/tables/poll/remove", requestId, session)
+  Hosting._getDetails (gathering) has (host, status)
+  active is isActiveTableStatus (status)
+  active is among [true]
+  hosting is matchesUser (a: host, b: viewer)
+  hosting is among [false]
+  Reserving._hasReservation (resource: gathering, user: viewer) has (reserved)
+  reserved is among [true]
+  whether Hosting._getDetails (gathering) has (confirmedVenue)
+  pollOpen is isPollOpen (confirmedVenue, status)
+  pollOpen is among [true]
+  Polling._getOption (option) has (proposedBy, scope: gathering)
+  canRemove is canRemovePollOption (hosting, proposedBy, viewer)
+  canRemove is among [true]
+then
+  Polling.removeOption (option, scope: gathering)
+```
+
+### Polls.Editing.RemoveOption:remove-seated#3
+
+Authored path: `Polls.Editing.RemoveOption`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 23.
+
+```reaction
+when Polling.removeOption (option, scope: gathering), asked by Polls.Editing.RemoveOption:remove-seated#2
+where
+  earlier, RequestBoundary.request (gathering, option, path: "/api/tables/poll/remove", requestId, session)
+then
+  RequestBoundary.respond (removed: true, requestId)
+```
+
+### Polls.Editing.RemoveOption:table-inactive#2
+
+Authored path: `Polls.Editing.RemoveOption`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 23.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Editing.RemoveOption
+where
+  earlier, RequestBoundary.request (gathering, option, path: "/api/tables/poll/remove", requestId, session)
+  Hosting._getDetails (gathering) has (status)
+  active is isActiveTableStatus (status)
+  active is among [false]
+then
+  RequestBoundary.respond (error: "TABLE_INACTIVE", requestId)
+```
+
+### Polls.Venue.ChooseVenue
+
+Authored path: `Polls.Venue.ChooseVenue`.
+- Covered by [Polls](../design/compositions/Polls.md), line 28.
+- Covered by [Polls](../design/compositions/Polls.md), line 31.
+
+```reaction
+when RequestBoundary.request (gathering, option, path: "/api/tables/poll/choose-venue", requestId, session)
+where
+  now is now
+then
+  Sessioning.current (now, session)
+```
+
+### Polls.Venue.ChooseVenue:choose-venue#2
+
+Authored path: `Polls.Venue.ChooseVenue`.
+- Covered by [Polls](../design/compositions/Polls.md), line 28.
+- Covered by [Polls](../design/compositions/Polls.md), line 31.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Venue.ChooseVenue
+where
+  earlier, RequestBoundary.request (gathering, option, path: "/api/tables/poll/choose-venue", requestId, session)
+  Hosting._getDetails (gathering) has (host, status)
+  hosting is matchesUser (a: host, b: viewer)
+  hosting is among [true]
+  active is isActiveTableStatus (status)
+  active is among [true]
+  whether Hosting._getDetails (gathering) has (confirmedVenue)
+  pollOpen is isPollOpen (confirmedVenue, status)
+  pollOpen is among [true]
+  Polling._getOption (option) has (label, scope: gathering)
+then
+  Hosting.setVenue (confirmedVenue: label, gathering)
+```
+
+### Polls.Venue.ChooseVenue:choose-venue#3
+
+Authored path: `Polls.Venue.ChooseVenue`.
+- Covered by [Polls](../design/compositions/Polls.md), line 28.
+- Covered by [Polls](../design/compositions/Polls.md), line 31.
+
+```reaction
+when Hosting.setVenue (confirmedVenue: label, gathering), asked by Polls.Venue.ChooseVenue:choose-venue#2
+where
+  earlier, RequestBoundary.request (gathering, option, path: "/api/tables/poll/choose-venue", requestId, session)
+then
+  RequestBoundary.respond (confirmedVenue: label, requestId)
+```
+
+### Polls.Venue.ChooseVenue:no-such-option#2
+
+Authored path: `Polls.Venue.ChooseVenue`.
+- Covered by [Polls](../design/compositions/Polls.md), line 28.
+- Covered by [Polls](../design/compositions/Polls.md), line 31.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Venue.ChooseVenue
+where
+  earlier, RequestBoundary.request (gathering, option, path: "/api/tables/poll/choose-venue", requestId, session)
+  Hosting._getDetails (gathering) has (host, status)
+  hosting is matchesUser (a: host, b: viewer)
+  hosting is among [true]
+  active is isActiveTableStatus (status)
+  active is among [true]
+  whether Hosting._getDetails (gathering) has (confirmedVenue)
+  pollOpen is isPollOpen (confirmedVenue, status)
+  pollOpen is among [true]
+  no Polling._getOption (option) has (scope: gathering)
+then
+  RequestBoundary.respond (error: "NO_SUCH_OPTION", requestId)
+```
+
+### Polls.Venue.ChooseVenue:no-such-table#2
+
+Authored path: `Polls.Venue.ChooseVenue`.
+- Covered by [Polls](../design/compositions/Polls.md), line 28.
+- Covered by [Polls](../design/compositions/Polls.md), line 31.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Venue.ChooseVenue
+where
+  earlier, RequestBoundary.request (gathering, option, path: "/api/tables/poll/choose-venue", requestId, session)
+  no Hosting._getDetails (gathering)
+then
+  RequestBoundary.respond (error: "NO_SUCH_TABLE", requestId)
+```
+
+### Polls.Venue.ChooseVenue:not-host#2
+
+Authored path: `Polls.Venue.ChooseVenue`.
+- Covered by [Polls](../design/compositions/Polls.md), line 28.
+- Covered by [Polls](../design/compositions/Polls.md), line 31.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Venue.ChooseVenue
+where
+  earlier, RequestBoundary.request (gathering, option, path: "/api/tables/poll/choose-venue", requestId, session)
+  Hosting._getDetails (gathering) has (host)
+  hosting is matchesUser (a: host, b: viewer)
+  hosting is among [false]
+then
+  RequestBoundary.respond (error: "NOT_HOST", requestId)
+```
+
+### Polls.Venue.ChooseVenue:poll-closed#2
+
+Authored path: `Polls.Venue.ChooseVenue`.
+- Covered by [Polls](../design/compositions/Polls.md), line 28.
+- Covered by [Polls](../design/compositions/Polls.md), line 31.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Venue.ChooseVenue
+where
+  earlier, RequestBoundary.request (gathering, option, path: "/api/tables/poll/choose-venue", requestId, session)
+  Hosting._getDetails (gathering) has (host, status)
+  hosting is matchesUser (a: host, b: viewer)
+  hosting is among [true]
+  active is isActiveTableStatus (status)
+  active is among [true]
+  whether Hosting._getDetails (gathering) has (confirmedVenue)
+  pollOpen is isPollOpen (confirmedVenue, status)
+  pollOpen is among [false]
+then
+  RequestBoundary.respond (error: "POLL_CLOSED", requestId)
+```
+
+### Polls.Venue.ChooseVenue:table-inactive#2
+
+Authored path: `Polls.Venue.ChooseVenue`.
+- Covered by [Polls](../design/compositions/Polls.md), line 28.
+- Covered by [Polls](../design/compositions/Polls.md), line 31.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Venue.ChooseVenue
+where
+  earlier, RequestBoundary.request (gathering, option, path: "/api/tables/poll/choose-venue", requestId, session)
+  Hosting._getDetails (gathering) has (host, status)
+  hosting is matchesUser (a: host, b: viewer)
+  hosting is among [true]
+  active is isActiveTableStatus (status)
+  active is among [false]
+then
+  RequestBoundary.respond (error: "TABLE_INACTIVE", requestId)
+```
+
+### Polls.Viewing.ViewPoll
+
+Authored path: `Polls.Viewing.ViewPoll`.
+- Covered by [Polls](../design/compositions/Polls.md), line 5.
+- Covered by [Polls](../design/compositions/Polls.md), line 10.
+
+```reaction
+when RequestBoundary.request (gathering, path: "/api/tables/poll", requestId, session)
+where
+  now is now
+then
+  Sessioning.current (now, session)
+```
+
+### Polls.Viewing.ViewPoll:host-viewer#2
+
+Authored path: `Polls.Viewing.ViewPoll`.
+- Covered by [Polls](../design/compositions/Polls.md), line 5.
+- Covered by [Polls](../design/compositions/Polls.md), line 10.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Viewing.ViewPoll
+where
+  earlier, RequestBoundary.request (gathering, path: "/api/tables/poll", requestId, session)
+  Hosting._getDetails (gathering) has (host, status)
+  active is isActiveTableStatus (status)
+  active is among [true]
+  hosting is matchesUser (a: host, b: viewer)
+  hosting is among [true]
+  whether Hosting._getDetails (gathering) has (confirmedVenue)
+  open is isPollOpen (confirmedVenue, status)
+  whether Polling._getVote (scope: gathering, voter: viewer) has (option: votedOption)
+then
+  RequestBoundary.respond (confirmedVenue, hosting, open, options: former "the poll options" with (gathering, hosting, viewer), requestId, votedOption)
+```
+
+### Polls.Viewing.ViewPoll:no-such-table#2
+
+Authored path: `Polls.Viewing.ViewPoll`.
+- Covered by [Polls](../design/compositions/Polls.md), line 5.
+- Covered by [Polls](../design/compositions/Polls.md), line 10.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Viewing.ViewPoll
+where
+  earlier, RequestBoundary.request (gathering, path: "/api/tables/poll", requestId, session)
+  no Hosting._getDetails (gathering)
+then
+  RequestBoundary.respond (error: "NO_SUCH_TABLE", requestId)
+```
+
+### Polls.Viewing.ViewPoll:not-participant#2
+
+Authored path: `Polls.Viewing.ViewPoll`.
+- Covered by [Polls](../design/compositions/Polls.md), line 5.
+- Covered by [Polls](../design/compositions/Polls.md), line 10.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Viewing.ViewPoll
+where
+  earlier, RequestBoundary.request (gathering, path: "/api/tables/poll", requestId, session)
+  Hosting._getDetails (gathering) has (host, status)
+  active is isActiveTableStatus (status)
+  active is among [true]
+  hosting is matchesUser (a: host, b: viewer)
+  hosting is among [false]
+  Reserving._hasReservation (resource: gathering, user: viewer) has (reserved)
+  reserved is among [false]
+then
+  RequestBoundary.respond (error: "NOT_PARTICIPANT", requestId)
+```
+
+### Polls.Viewing.ViewPoll:seated-viewer#2
+
+Authored path: `Polls.Viewing.ViewPoll`.
+- Covered by [Polls](../design/compositions/Polls.md), line 5.
+- Covered by [Polls](../design/compositions/Polls.md), line 10.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Viewing.ViewPoll
+where
+  earlier, RequestBoundary.request (gathering, path: "/api/tables/poll", requestId, session)
+  Hosting._getDetails (gathering) has (host, status)
+  active is isActiveTableStatus (status)
+  active is among [true]
+  hosting is matchesUser (a: host, b: viewer)
+  hosting is among [false]
+  Reserving._hasReservation (resource: gathering, user: viewer) has (reserved)
+  reserved is among [true]
+  whether Hosting._getDetails (gathering) has (confirmedVenue)
+  open is isPollOpen (confirmedVenue, status)
+  whether Polling._getVote (scope: gathering, voter: viewer) has (option: votedOption)
+then
+  RequestBoundary.respond (confirmedVenue, hosting, open, options: former "the poll options" with (gathering, hosting, viewer), requestId, votedOption)
+```
+
+### Polls.Viewing.ViewPoll:table-inactive#2
+
+Authored path: `Polls.Viewing.ViewPoll`.
+- Covered by [Polls](../design/compositions/Polls.md), line 5.
+- Covered by [Polls](../design/compositions/Polls.md), line 10.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Viewing.ViewPoll
+where
+  earlier, RequestBoundary.request (gathering, path: "/api/tables/poll", requestId, session)
+  Hosting._getDetails (gathering) has (status)
+  active is isActiveTableStatus (status)
+  active is among [false]
+then
+  RequestBoundary.respond (error: "TABLE_INACTIVE", requestId)
+```
+
+### Polls.Voting.ClearVote
+
+Authored path: `Polls.Voting.ClearVote`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 22.
+
+```reaction
+when RequestBoundary.request (gathering, path: "/api/tables/poll/unvote", requestId, session)
+where
+  now is now
+then
+  Sessioning.current (now, session)
+```
+
+### Polls.Voting.ClearVote:host-open#2
+
+Authored path: `Polls.Voting.ClearVote`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 22.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Voting.ClearVote
+where
+  earlier, RequestBoundary.request (gathering, path: "/api/tables/poll/unvote", requestId, session)
+  Hosting._getDetails (gathering) has (host, status)
+  active is isActiveTableStatus (status)
+  active is among [true]
+  hosting is matchesUser (a: host, b: viewer)
+  hosting is among [true]
+  whether Hosting._getDetails (gathering) has (confirmedVenue)
+  pollOpen is isPollOpen (confirmedVenue, status)
+  pollOpen is among [true]
+then
+  Polling.clearVote (scope: gathering, voter: viewer)
+```
+
+### Polls.Voting.ClearVote:host-open#3
+
+Authored path: `Polls.Voting.ClearVote`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 22.
+
+```reaction
+when Polling.clearVote (scope: gathering, voter: viewer), asked by Polls.Voting.ClearVote:host-open#2
+where
+  earlier, RequestBoundary.request (gathering, path: "/api/tables/poll/unvote", requestId, session)
+then
+  RequestBoundary.respond (cleared: true, requestId)
+```
+
+### Polls.Voting.ClearVote:no-such-table#2
+
+Authored path: `Polls.Voting.ClearVote`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 22.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Voting.ClearVote
+where
+  earlier, RequestBoundary.request (gathering, path: "/api/tables/poll/unvote", requestId, session)
+  no Hosting._getDetails (gathering)
+then
+  RequestBoundary.respond (error: "NO_SUCH_TABLE", requestId)
+```
+
+### Polls.Voting.ClearVote:not-participant#2
+
+Authored path: `Polls.Voting.ClearVote`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 22.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Voting.ClearVote
+where
+  earlier, RequestBoundary.request (gathering, path: "/api/tables/poll/unvote", requestId, session)
+  Hosting._getDetails (gathering) has (host, status)
+  active is isActiveTableStatus (status)
+  active is among [true]
+  hosting is matchesUser (a: host, b: viewer)
+  hosting is among [false]
+  Reserving._hasReservation (resource: gathering, user: viewer) has (reserved)
+  reserved is among [false]
+then
+  RequestBoundary.respond (error: "NOT_PARTICIPANT", requestId)
+```
+
+### Polls.Voting.ClearVote:poll-closed-host#2
+
+Authored path: `Polls.Voting.ClearVote`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 22.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Voting.ClearVote
+where
+  earlier, RequestBoundary.request (gathering, path: "/api/tables/poll/unvote", requestId, session)
+  Hosting._getDetails (gathering) has (host, status)
+  active is isActiveTableStatus (status)
+  active is among [true]
+  hosting is matchesUser (a: host, b: viewer)
+  hosting is among [true]
+  whether Hosting._getDetails (gathering) has (confirmedVenue)
+  pollOpen is isPollOpen (confirmedVenue, status)
+  pollOpen is among [false]
+then
+  RequestBoundary.respond (error: "POLL_CLOSED", requestId)
+```
+
+### Polls.Voting.ClearVote:poll-closed-seated#2
+
+Authored path: `Polls.Voting.ClearVote`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 22.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Voting.ClearVote
+where
+  earlier, RequestBoundary.request (gathering, path: "/api/tables/poll/unvote", requestId, session)
+  Hosting._getDetails (gathering) has (host, status)
+  active is isActiveTableStatus (status)
+  active is among [true]
+  hosting is matchesUser (a: host, b: viewer)
+  hosting is among [false]
+  Reserving._hasReservation (resource: gathering, user: viewer) has (reserved)
+  reserved is among [true]
+  whether Hosting._getDetails (gathering) has (confirmedVenue)
+  pollOpen is isPollOpen (confirmedVenue, status)
+  pollOpen is among [false]
+then
+  RequestBoundary.respond (error: "POLL_CLOSED", requestId)
+```
+
+### Polls.Voting.ClearVote:seated-open#2
+
+Authored path: `Polls.Voting.ClearVote`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 22.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Voting.ClearVote
+where
+  earlier, RequestBoundary.request (gathering, path: "/api/tables/poll/unvote", requestId, session)
+  Hosting._getDetails (gathering) has (host, status)
+  active is isActiveTableStatus (status)
+  active is among [true]
+  hosting is matchesUser (a: host, b: viewer)
+  hosting is among [false]
+  Reserving._hasReservation (resource: gathering, user: viewer) has (reserved)
+  reserved is among [true]
+  whether Hosting._getDetails (gathering) has (confirmedVenue)
+  pollOpen is isPollOpen (confirmedVenue, status)
+  pollOpen is among [true]
+then
+  Polling.clearVote (scope: gathering, voter: viewer)
+```
+
+### Polls.Voting.ClearVote:seated-open#3
+
+Authored path: `Polls.Voting.ClearVote`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 22.
+
+```reaction
+when Polling.clearVote (scope: gathering, voter: viewer), asked by Polls.Voting.ClearVote:seated-open#2
+where
+  earlier, RequestBoundary.request (gathering, path: "/api/tables/poll/unvote", requestId, session)
+then
+  RequestBoundary.respond (cleared: true, requestId)
+```
+
+### Polls.Voting.ClearVote:table-inactive#2
+
+Authored path: `Polls.Voting.ClearVote`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 22.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Voting.ClearVote
+where
+  earlier, RequestBoundary.request (gathering, path: "/api/tables/poll/unvote", requestId, session)
+  Hosting._getDetails (gathering) has (status)
+  active is isActiveTableStatus (status)
+  active is among [false]
+then
+  RequestBoundary.respond (error: "TABLE_INACTIVE", requestId)
+```
+
+### Polls.Voting.VoteOption
+
+Authored path: `Polls.Voting.VoteOption`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 21.
+
+```reaction
+when RequestBoundary.request (gathering, option, path: "/api/tables/poll/vote", requestId, session)
+where
+  now is now
+then
+  Sessioning.current (now, session)
+```
+
+### Polls.Voting.VoteOption:host-open#2
+
+Authored path: `Polls.Voting.VoteOption`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 21.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Voting.VoteOption
+where
+  earlier, RequestBoundary.request (gathering, option, path: "/api/tables/poll/vote", requestId, session)
+  Hosting._getDetails (gathering) has (host, status)
+  active is isActiveTableStatus (status)
+  active is among [true]
+  hosting is matchesUser (a: host, b: viewer)
+  hosting is among [true]
+  whether Hosting._getDetails (gathering) has (confirmedVenue)
+  pollOpen is isPollOpen (confirmedVenue, status)
+  pollOpen is among [true]
+then
+  Polling.castVote (option, scope: gathering, voter: viewer)
+```
+
+### Polls.Voting.VoteOption:host-open#3
+
+Authored path: `Polls.Voting.VoteOption`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 21.
+
+```reaction
+when Polling.castVote (option, scope: gathering, voter: viewer), asked by Polls.Voting.VoteOption:host-open#2
+where
+  earlier, RequestBoundary.request (gathering, option, path: "/api/tables/poll/vote", requestId, session)
+then
+  RequestBoundary.respond (requestId, voted: true)
+```
+
+### Polls.Voting.VoteOption:no-such-table#2
+
+Authored path: `Polls.Voting.VoteOption`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 21.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Voting.VoteOption
+where
+  earlier, RequestBoundary.request (gathering, option, path: "/api/tables/poll/vote", requestId, session)
+  no Hosting._getDetails (gathering)
+then
+  RequestBoundary.respond (error: "NO_SUCH_TABLE", requestId)
+```
+
+### Polls.Voting.VoteOption:not-participant#2
+
+Authored path: `Polls.Voting.VoteOption`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 21.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Voting.VoteOption
+where
+  earlier, RequestBoundary.request (gathering, option, path: "/api/tables/poll/vote", requestId, session)
+  Hosting._getDetails (gathering) has (host, status)
+  active is isActiveTableStatus (status)
+  active is among [true]
+  hosting is matchesUser (a: host, b: viewer)
+  hosting is among [false]
+  Reserving._hasReservation (resource: gathering, user: viewer) has (reserved)
+  reserved is among [false]
+then
+  RequestBoundary.respond (error: "NOT_PARTICIPANT", requestId)
+```
+
+### Polls.Voting.VoteOption:poll-closed-host#2
+
+Authored path: `Polls.Voting.VoteOption`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 21.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Voting.VoteOption
+where
+  earlier, RequestBoundary.request (gathering, option, path: "/api/tables/poll/vote", requestId, session)
+  Hosting._getDetails (gathering) has (host, status)
+  active is isActiveTableStatus (status)
+  active is among [true]
+  hosting is matchesUser (a: host, b: viewer)
+  hosting is among [true]
+  whether Hosting._getDetails (gathering) has (confirmedVenue)
+  pollOpen is isPollOpen (confirmedVenue, status)
+  pollOpen is among [false]
+then
+  RequestBoundary.respond (error: "POLL_CLOSED", requestId)
+```
+
+### Polls.Voting.VoteOption:poll-closed-seated#2
+
+Authored path: `Polls.Voting.VoteOption`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 21.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Voting.VoteOption
+where
+  earlier, RequestBoundary.request (gathering, option, path: "/api/tables/poll/vote", requestId, session)
+  Hosting._getDetails (gathering) has (host, status)
+  active is isActiveTableStatus (status)
+  active is among [true]
+  hosting is matchesUser (a: host, b: viewer)
+  hosting is among [false]
+  Reserving._hasReservation (resource: gathering, user: viewer) has (reserved)
+  reserved is among [true]
+  whether Hosting._getDetails (gathering) has (confirmedVenue)
+  pollOpen is isPollOpen (confirmedVenue, status)
+  pollOpen is among [false]
+then
+  RequestBoundary.respond (error: "POLL_CLOSED", requestId)
+```
+
+### Polls.Voting.VoteOption:seated-open#2
+
+Authored path: `Polls.Voting.VoteOption`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 21.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Voting.VoteOption
+where
+  earlier, RequestBoundary.request (gathering, option, path: "/api/tables/poll/vote", requestId, session)
+  Hosting._getDetails (gathering) has (host, status)
+  active is isActiveTableStatus (status)
+  active is among [true]
+  hosting is matchesUser (a: host, b: viewer)
+  hosting is among [false]
+  Reserving._hasReservation (resource: gathering, user: viewer) has (reserved)
+  reserved is among [true]
+  whether Hosting._getDetails (gathering) has (confirmedVenue)
+  pollOpen is isPollOpen (confirmedVenue, status)
+  pollOpen is among [true]
+then
+  Polling.castVote (option, scope: gathering, voter: viewer)
+```
+
+### Polls.Voting.VoteOption:seated-open#3
+
+Authored path: `Polls.Voting.VoteOption`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 21.
+
+```reaction
+when Polling.castVote (option, scope: gathering, voter: viewer), asked by Polls.Voting.VoteOption:seated-open#2
+where
+  earlier, RequestBoundary.request (gathering, option, path: "/api/tables/poll/vote", requestId, session)
+then
+  RequestBoundary.respond (requestId, voted: true)
+```
+
+### Polls.Voting.VoteOption:table-inactive#2
+
+Authored path: `Polls.Voting.VoteOption`.
+- Covered by [Polls](../design/compositions/Polls.md), line 17.
+- Covered by [Polls](../design/compositions/Polls.md), line 21.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Polls.Voting.VoteOption
+where
+  earlier, RequestBoundary.request (gathering, option, path: "/api/tables/poll/vote", requestId, session)
+  Hosting._getDetails (gathering) has (status)
+  active is isActiveTableStatus (status)
+  active is among [false]
+then
+  RequestBoundary.respond (error: "TABLE_INACTIVE", requestId)
 ```
 
 ### Profiles.Self.ClearProfile
@@ -2008,6 +3158,12 @@ not listed here have no explicit input contract.
 - `/api/tables/create` — requires `session`, `title`, `area`, `startTime`, `endTime`, `cutoffTime`, `capacity`; fills `confirmedVenue` with null when absent; fills `details` with null when absent; fills `linkLabel` with null when absent; fills `scope` with null when absent
 - `/api/tables/mine` — requires `session`
 - `/api/tables/place` — requires `session`, `gathering`
+- `/api/tables/poll` — requires `session`, `gathering`
+- `/api/tables/poll/add` — requires `session`, `gathering`, `label`
+- `/api/tables/poll/choose-venue` — requires `session`, `gathering`, `option`
+- `/api/tables/poll/remove` — requires `session`, `gathering`, `option`
+- `/api/tables/poll/unvote` — requires `session`, `gathering`
+- `/api/tables/poll/vote` — requires `session`, `gathering`, `option`
 - `/api/tables/profiles` — requires `session`, `gathering`
 - `/api/tables/view` — requires `token`
 - `/api/tables/withdraw` — requires `session`, `gathering`
