@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { authState, client, getStoredSession, logoutCurrentSession, refreshAuth, setStoredSession } from "../auth-client.ts";
 import { createLiveRefresher } from "../live-refresh.ts";
+import TableRoster, { type TableRosterData } from "./TableRoster.vue";
 
 interface TableDetails {
   gathering: string;
@@ -34,12 +35,20 @@ const place = ref<{ reservation: string | null; position: number | null } | null
 const busy = ref(false);
 const message = ref("");
 const errorMessage = ref("");
+const roster = ref<TableRosterData | null>(null);
+const rosterLoading = ref(false);
+const rosterError = ref("");
 let loadGeneration = 0;
 
 const session = () => getStoredSession() ?? "";
 const signedIn = computed(() => authState.user !== null);
 const seated = computed(() => Boolean(place.value?.reservation));
 const waitlisted = computed(() => place.value?.position != null);
+const isActiveTable = (status: string) => status === "OPEN" || status === "CONFIRMED" || status === "BOOKED";
+const canViewRoster = computed(() =>
+  Boolean(signedIn.value && table.value && isActiveTable(table.value.status) && (hosting.value || seated.value)),
+);
+const profileReturnTo = computed(() => `/profile?returnTo=${encodeURIComponent(route.fullPath)}`);
 const when = (iso: string) =>
   new Date(iso).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
@@ -60,6 +69,12 @@ async function loadTable(options: { background?: boolean } = {}): Promise<boolea
   return true;
 }
 
+function clearRoster() {
+  roster.value = null;
+  rosterLoading.value = false;
+  rosterError.value = "";
+}
+
 async function loadMine(generation = loadGeneration) {
   if (!table.value || !signedIn.value) return;
   const currentToken = token.value;
@@ -73,6 +88,7 @@ async function loadMine(generation = loadGeneration) {
       hosting.value = false;
       hostAcceptAttempted.value = false;
       place.value = null;
+      clearRoster();
     }
     return;
   }
@@ -81,15 +97,72 @@ async function loadMine(generation = loadGeneration) {
     hostAcceptAttempted.value = false;
   }
   place.value = { reservation: mine.place.reservation ?? null, position: mine.place.position ?? null };
+  if (!canViewRoster.value) {
+    clearRoster();
+  }
+}
+
+async function loadRoster(generation = loadGeneration, options: { background?: boolean } = {}) {
+  if (!canViewRoster.value || !table.value) {
+    clearRoster();
+    return;
+  }
+  const currentToken = token.value;
+  const gathering = table.value.gathering;
+  if (!options.background && !roster.value) {
+    rosterLoading.value = true;
+  }
+  const result = await client.api.tables.profiles({ session: session(), gathering });
+  if (generation !== loadGeneration || token.value !== currentToken) return;
+  rosterLoading.value = false;
+  if (!canViewRoster.value) {
+    clearRoster();
+    return;
+  }
+  if ("error" in result) {
+    if (result.error === "UNAUTHORIZED") {
+      setStoredSession(null);
+      authState.user = null;
+      authState.checked = true;
+      hosting.value = false;
+      hostAcceptAttempted.value = false;
+      place.value = null;
+      clearRoster();
+      return;
+    }
+    if (result.error === "CONFLICT" || result.error === "FORBIDDEN" || result.error === "NOT_FOUND") {
+      clearRoster();
+      return;
+    }
+    if (!options.background || !roster.value) {
+      rosterError.value = "Could not load tablemates right now.";
+    }
+    return;
+  }
+  rosterError.value = "";
+  roster.value = { host: result.host, seated: result.seated };
 }
 
 async function refreshLive() {
   if (busy.value || notFound.value || !table.value) return;
   const generation = loadGeneration;
   const ok = await loadTable({ background: true });
-  if (!ok || generation !== loadGeneration || busy.value || notFound.value || !table.value) return;
+  if (!ok || generation !== loadGeneration || busy.value || notFound.value || !table.value) {
+    if (!table.value || !isActiveTable(table.value?.status ?? "")) {
+      clearRoster();
+    }
+    return;
+  }
   if (signedIn.value) {
     await loadMine(generation);
+    if (generation !== loadGeneration || busy.value) return;
+    if (canViewRoster.value) {
+      await loadRoster(generation, { background: true });
+    } else {
+      clearRoster();
+    }
+  } else {
+    clearRoster();
   }
 }
 
@@ -130,6 +203,9 @@ async function accept() {
       return;
     }
     await Promise.all([loadTable(), loadMine()]);
+    if (canViewRoster.value) {
+      await loadRoster(loadGeneration);
+    }
   } finally {
     busy.value = false;
   }
@@ -146,6 +222,7 @@ async function withdraw() {
       errorMessage.value = result.error === "CONFLICT" ? "Seats are locked, so you can no longer withdraw." : `Could not withdraw (${result.error}).`;
       return;
     }
+    clearRoster();
     message.value = "You withdrew. You can accept again while the table is open.";
     await Promise.all([loadTable(), loadMine()]);
   } finally {
@@ -157,6 +234,7 @@ async function withdraw() {
 
 
 async function signOut() {
+  clearRoster();
   await logoutCurrentSession();
   hosting.value = false;
   hostAcceptAttempted.value = false;
@@ -174,6 +252,7 @@ function resetForToken() {
   place.value = null;
   message.value = "";
   errorMessage.value = "";
+  clearRoster();
 }
 
 async function initForToken() {
@@ -183,6 +262,10 @@ async function initForToken() {
   await loadTable();
   if (generation !== loadGeneration) return;
   await loadMine(generation);
+  if (generation !== loadGeneration) return;
+  if (canViewRoster.value) {
+    await loadRoster(generation);
+  }
   if (generation !== loadGeneration) return;
   if (route.query.accept === "1") {
     await router.replace({ path: route.path });
@@ -214,63 +297,75 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <main class="shell card stack">
-    <RouterLink v-if="signedIn" to="/" class="muted">← Your tables</RouterLink>
+  <main class="shell stack">
+    <section class="card stack">
+      <RouterLink v-if="signedIn" to="/" class="muted">← Your tables</RouterLink>
 
-    <template v-if="notFound">
-      <strong>This link doesn't work</strong>
-      <p class="muted">It may have been turned off by the host, or mistyped.</p>
-    </template>
-
-    <template v-else-if="table">
-      <div>
-        <strong class="title">{{ table.title }}</strong>
-        <div class="muted">{{ table.area }}<template v-if="table.confirmedVenue"> · {{ table.confirmedVenue }}</template></div>
-      </div>
-      <div class="muted">
-        <div>{{ when(table.startTime) }} to {{ when(table.endTime) }}</div>
-        <div>RSVP by {{ when(table.cutoffTime) }}</div>
-        <div v-if="table.scope">Only for @{{ table.scope }} emails</div>
-      </div>
-      <p v-if="table.details">{{ table.details }}</p>
-
-      <div class="seats">
-        <strong>{{ table.remaining }} of {{ table.capacity }} seats left</strong>
-        <span v-if="table.waitlistCount" class="muted"> · {{ table.waitlistCount }} on the waitlist</span>
-        <div v-if="table.status !== 'OPEN' && table.status !== 'CONFIRMED'" class="muted">This table is {{ table.status.toLowerCase() }}.</div>
-        <div v-else-if="table.locked" class="muted">Seats are locked.</div>
-      </div>
-
-      <template v-if="hosting">
-        <p v-if="hostAcceptAttempted" class="error">You're hosting this table, so no seat was accepted.</p>
-        <p v-else class="muted">You're hosting this table.</p>
-        <RouterLink class="btn" :to="`/tables/${table.gathering}`">Manage this table and its links</RouterLink>
+      <template v-if="notFound">
+        <strong>This link doesn't work</strong>
+        <p class="muted">It may have been turned off by the host, or mistyped.</p>
       </template>
 
-      <template v-else-if="seated">
-        <p><strong>You have a seat.</strong></p>
-        <button type="button" class="btn" :disabled="busy" @click="withdraw">Withdraw</button>
+      <template v-else-if="table">
+        <div>
+          <strong class="title">{{ table.title }}</strong>
+          <div class="muted">{{ table.area }}<template v-if="table.confirmedVenue"> · {{ table.confirmedVenue }}</template></div>
+        </div>
+        <div class="muted">
+          <div>{{ when(table.startTime) }} to {{ when(table.endTime) }}</div>
+          <div>RSVP by {{ when(table.cutoffTime) }}</div>
+          <div v-if="table.scope">Only for @{{ table.scope }} emails</div>
+        </div>
+        <p v-if="table.details">{{ table.details }}</p>
+
+        <div class="seats">
+          <strong>{{ table.remaining }} of {{ table.capacity }} seats left</strong>
+          <span v-if="table.waitlistCount" class="muted"> · {{ table.waitlistCount }} on the waitlist</span>
+          <div v-if="table.status !== 'OPEN' && table.status !== 'CONFIRMED'" class="muted">This table is {{ table.status.toLowerCase() }}.</div>
+          <div v-else-if="table.locked" class="muted">Seats are locked.</div>
+        </div>
+
+        <template v-if="hosting">
+          <p v-if="hostAcceptAttempted" class="error">You're hosting this table, so no seat was accepted.</p>
+          <p v-else class="muted">You're hosting this table.</p>
+          <RouterLink class="btn" :to="`/tables/${table.gathering}`">Manage this table and its links</RouterLink>
+        </template>
+
+        <template v-else-if="seated">
+          <p><strong>You have a seat.</strong></p>
+          <button type="button" class="btn" :disabled="busy" @click="withdraw">Withdraw</button>
+        </template>
+
+        <template v-else-if="waitlisted">
+          <p><strong>You're #{{ place?.position }} on the waitlist.</strong> You'll get the next seat that frees up.</p>
+          <button type="button" class="btn" :disabled="busy" @click="withdraw">Leave the waitlist</button>
+        </template>
+
+        <template v-else>
+          <button type="button" class="btn btn-primary" :disabled="busy" @click="accept">
+            {{ signedIn ? (table.remaining > 0 ? "Accept a seat" : "Join the waitlist") : "Accept (you'll sign in first)" }}
+          </button>
+        </template>
+
+        <p v-if="message" class="muted">{{ message }}</p>
+        <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
       </template>
 
-      <template v-else-if="waitlisted">
-        <p><strong>You're #{{ place?.position }} on the waitlist.</strong> You'll get the next seat that frees up.</p>
-        <button type="button" class="btn" :disabled="busy" @click="withdraw">Leave the waitlist</button>
-      </template>
+      <p v-else class="muted">Loading…</p>
+    </section>
 
-      <template v-else>
-        <button type="button" class="btn btn-primary" :disabled="busy" @click="accept">
-          {{ signedIn ? (table.remaining > 0 ? "Accept a seat" : "Join the waitlist") : "Accept (you'll sign in first)" }}
-        </button>
-      </template>
+    <TableRoster
+      v-if="canViewRoster"
+      :roster="roster"
+      :loading="rosterLoading"
+      :error="rosterError"
+      :edit-profile-to="profileReturnTo"
+    />
 
-      <p v-if="message" class="muted">{{ message }}</p>
-      <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
-      <p v-if="signedIn && authState.user" class="muted small">
-        Signed in as {{ authState.user.email }} ·
-        <button type="button" class="link-btn" @click="signOut">Sign out</button>
-      </p>
-    </template>
-
-    <p v-else class="muted">Loading…</p>
+    <p v-if="signedIn && authState.user" class="muted small">
+      Signed in as {{ authState.user.email }} ·
+      <RouterLink :to="profileReturnTo" class="link-btn">Dining profile</RouterLink> ·
+      <button type="button" class="link-btn" @click="signOut">Sign out</button>
+    </p>
   </main>
 </template>

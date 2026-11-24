@@ -4,6 +4,7 @@ import { useRoute, useRouter } from "vue-router";
 import { openTableUrl } from "../../src/venues/opentable.ts";
 import { authState, client, getStoredSession, logoutCurrentSession, setStoredSession } from "../auth-client.ts";
 import { createLiveRefresher } from "../live-refresh.ts";
+import TableRoster, { type TableRosterData } from "./TableRoster.vue";
 
 interface Table {
   title: string;
@@ -27,7 +28,13 @@ const table = ref<Table | null>(null);
 const loaded = ref(false);
 const actionInFlight = ref(false);
 const errorMessage = ref("");
+const roster = ref<TableRosterData | null>(null);
+const rosterLoading = ref(false);
+const rosterError = ref("");
 let loadGeneration = 0;
+
+const isActiveTable = (status: string) => status === "OPEN" || status === "CONFIRMED" || status === "BOOKED";
+const profileReturnTo = computed(() => `/profile?returnTo=${encodeURIComponent(route.fullPath)}`);
 
 interface LinkRow {
   link: string;
@@ -168,8 +175,52 @@ async function load(options: { background?: boolean } = {}) {
   loaded.value = true;
 }
 
+async function loadRoster(options: { background?: boolean } = {}) {
+  if (!table.value || !isActiveTable(table.value.status)) {
+    roster.value = null;
+    rosterLoading.value = false;
+    rosterError.value = "";
+    return;
+  }
+  const currentId = tableId.value;
+  const generation = loadGeneration;
+  if (!options.background && !roster.value) {
+    rosterLoading.value = true;
+  }
+  const result = await client.api.tables.profiles({ session: getStoredSession() ?? "", gathering: currentId });
+  if (generation !== loadGeneration || tableId.value !== currentId) return;
+  rosterLoading.value = false;
+  if ("error" in result) {
+    if (result.error === "UNAUTHORIZED") {
+      await handleUnauthorized();
+      return;
+    }
+    if (result.error === "CONFLICT" || result.error === "FORBIDDEN" || result.error === "NOT_FOUND") {
+      roster.value = null;
+      rosterError.value = "";
+      return;
+    }
+    if (!options.background || !roster.value) {
+      rosterError.value = "Could not load tablemates right now.";
+    }
+    return;
+  }
+  rosterError.value = "";
+  roster.value = { host: result.host, seated: result.seated };
+}
+
+async function refreshLive() {
+  await load({ background: true });
+  if (table.value && isActiveTable(table.value.status)) {
+    await loadRoster({ background: true });
+  } else {
+    roster.value = null;
+    rosterError.value = "";
+  }
+}
+
 const refresher = createLiveRefresher({
-  refresh: () => load({ background: true }),
+  refresh: refreshLive,
   isPaused: () => !table.value || actionInFlight.value,
 });
 
@@ -181,10 +232,13 @@ async function initForTable() {
   loaded.value = false;
   errorMessage.value = "";
   links.value = [];
+  roster.value = null;
+  rosterLoading.value = false;
+  rosterError.value = "";
   clearCopied();
   await load();
   if (generation === loadGeneration && tableId.value === currentId && table.value) {
-    await loadLinks(generation);
+    await Promise.all([loadLinks(generation), loadRoster()]);
   }
 }
 
@@ -219,6 +273,12 @@ async function act(action: "confirm" | "book" | "cancel") {
       errorMessage.value = "";
     }
     await load();
+    if (table.value && isActiveTable(table.value.status)) {
+      await loadRoster({ background: true });
+    } else {
+      roster.value = null;
+      rosterError.value = "";
+    }
   } finally {
     actionInFlight.value = false;
   }
@@ -261,6 +321,14 @@ async function signOut() {
       <button v-if="['OPEN', 'CONFIRMED', 'BOOKED'].includes(table.status)" type="button" class="btn" @click="act('cancel')">Cancel table</button>
       <p v-if="errorMessage" class="error" role="alert">{{ errorMessage }}</p>
     </section>
+
+    <TableRoster
+      v-if="table && isActiveTable(table.status)"
+      :roster="roster"
+      :loading="rosterLoading"
+      :error="rosterError"
+      :edit-profile-to="profileReturnTo"
+    />
 
     <section v-if="table" class="card stack">
       <strong>Share links</strong>
@@ -316,6 +384,7 @@ async function signOut() {
 
     <p v-if="authState.user" class="muted small">
       Signed in as {{ authState.user.email }} ·
+      <RouterLink :to="profileReturnTo" class="link-btn">Dining profile</RouterLink> ·
       <button type="button" class="link-btn" @click="signOut">Sign out</button>
     </p>
   </main>

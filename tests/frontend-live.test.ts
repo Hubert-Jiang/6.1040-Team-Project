@@ -537,4 +537,210 @@ describe("live occupancy HTTP readback", () => {
     const html = await response.text();
     expect(html).toContain('<div id="app"></div>');
   });
+
+  test("serves the built SPA HTML on GET /profile", async () => {
+    const response = await fetch(`http://127.0.0.1:${server!.port}/profile`);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/html");
+    const html = await response.text();
+    expect(html).toContain('<div id="app"></div>');
+  });
+
+  test("supports profile me, save, clear, and refusals over the typed HTTP client", async () => {
+    const alice = await signIn("alice@mit.edu");
+
+    const initial = await client.api.profiles.me({ session: alice.session });
+    expect(initial).toEqual({
+      email: "alice@mit.edu",
+      accountName: null,
+      displayName: "alice@mit.edu",
+      preferredName: null,
+      dietaryRestrictions: [],
+      budgetPreferences: [],
+      walkPreferenceMinutes: null,
+      cuisinePreferences: [],
+      notes: null,
+    });
+
+    expect(
+      await client.api.profiles.save({
+        session: alice.session,
+        preferredName: "Ali",
+        dietaryRestrictions: ["VEGETARIAN", "NUT_FREE", "SHELLFISH_FREE"],
+        budgetPreferences: ["BUDGET", "MODERATE"],
+        walkPreferenceMinutes: 15,
+        cuisinePreferences: ["Thai", "Ramen"],
+        notes: "Mild spice please",
+      }),
+    ).toEqual({ saved: true });
+
+    const saved = await client.api.profiles.me({ session: alice.session });
+    expect(saved).toEqual({
+      email: "alice@mit.edu",
+      accountName: null,
+      displayName: "Ali",
+      preferredName: "Ali",
+      dietaryRestrictions: ["VEGETARIAN", "NUT_FREE", "SHELLFISH_FREE"],
+      budgetPreferences: ["BUDGET", "MODERATE"],
+      walkPreferenceMinutes: 15,
+      cuisinePreferences: ["Thai", "Ramen"],
+      notes: "Mild spice please",
+    });
+
+    // Optional fields can be cleared individually by omitting them / passing empty lists.
+    expect(
+      await client.api.profiles.save({
+        session: alice.session,
+        dietaryRestrictions: [],
+        budgetPreferences: [],
+        cuisinePreferences: [],
+      }),
+    ).toEqual({ saved: true });
+
+    const afterNullSave = await client.api.profiles.me({ session: alice.session });
+    if ("error" in afterNullSave) throw new Error(afterNullSave.error);
+    expect(afterNullSave.displayName).toBe("alice@mit.edu");
+    expect(afterNullSave.preferredName ?? null).toBeNull();
+    expect(afterNullSave.walkPreferenceMinutes ?? null).toBeNull();
+    expect(afterNullSave.notes ?? null).toBeNull();
+    expect(afterNullSave.dietaryRestrictions).toEqual([]);
+    expect(afterNullSave.budgetPreferences).toEqual([]);
+    expect(afterNullSave.cuisinePreferences).toEqual([]);
+
+    // Refuses invalid walk minutes and oversized fields, and invalid sessions.
+    expect(
+      await client.api.profiles.save({
+        session: alice.session,
+        walkPreferenceMinutes: 0,
+      }),
+    ).toEqual({ error: "INVALID_REQUEST" });
+    expect(
+      await client.api.profiles.save({
+        session: alice.session,
+        preferredName: "x".repeat(81),
+      }),
+    ).toEqual({ error: "INVALID_REQUEST" });
+    expect(
+      await client.api.profiles.save({
+        session: alice.session,
+        notes: "x".repeat(501),
+      }),
+    ).toEqual({ error: "INVALID_REQUEST" });
+    expect(await client.api.profiles.me({ session: "missing-session" })).toEqual({ error: "UNAUTHORIZED" });
+    expect(await client.api.profiles.clear({ session: "missing-session" })).toEqual({ error: "UNAUTHORIZED" });
+
+    expect(await client.api.profiles.clear({ session: alice.session })).toEqual({ cleared: true });
+  });
+
+  test("live table roster updates across seat accept, waitlist promotion, withdrawal, profile edits, and closes on cancel", async () => {
+    const host = await signIn("host-roster@mit.edu");
+    const guestA = await signIn("guesta-roster@mit.edu");
+    const guestB = await signIn("guestb-roster@mit.edu");
+    const outsider = await signIn("outsider-roster@mit.edu");
+
+    await client.api.profiles.save({
+      session: host.session,
+      preferredName: "Host Pat",
+      budgetPreferences: ["MODERATE"],
+    });
+    await client.api.profiles.save({
+      session: guestA.session,
+      preferredName: "Guest A",
+      dietaryRestrictions: ["HALAL", "SHELLFISH_FREE"],
+      walkPreferenceMinutes: 10,
+      cuisinePreferences: ["Mediterranean"],
+      notes: "No cilantro",
+    });
+
+    const table = await createTable(host.session, 1);
+
+    // Host can see initial roster with empty seated list.
+    const hostInitial = await client.api.tables.profiles({ session: host.session, gathering: table.gathering });
+    expect(hostInitial).toEqual({
+      host: {
+        user: host.user,
+        displayName: "Host Pat",
+        preferredName: "Host Pat",
+        dietaryRestrictions: [],
+        budgetPreferences: ["MODERATE"],
+        walkPreferenceMinutes: null,
+        cuisinePreferences: [],
+        notes: null,
+      },
+      seated: [],
+    });
+
+    // Outsider cannot read roster.
+    expect(await client.api.tables.profiles({ session: outsider.session, gathering: table.gathering })).toEqual({
+      error: "FORBIDDEN",
+    });
+
+    // Guest A accepts the seat and can view the roster.
+    const acceptA = await client.api.tables.accept({ session: guestA.session, token: table.token });
+    if ("error" in acceptA) throw new Error(acceptA.error);
+    const guestARoster = await client.api.tables.profiles({ session: guestA.session, gathering: table.gathering });
+    expect(guestARoster).toEqual({
+      host: {
+        user: host.user,
+        displayName: "Host Pat",
+        preferredName: "Host Pat",
+        dietaryRestrictions: [],
+        budgetPreferences: ["MODERATE"],
+        walkPreferenceMinutes: null,
+        cuisinePreferences: [],
+        notes: null,
+      },
+      seated: [
+        {
+          user: guestA.user,
+          displayName: "Guest A",
+          preferredName: "Guest A",
+          dietaryRestrictions: ["HALAL", "SHELLFISH_FREE"],
+          budgetPreferences: [],
+          walkPreferenceMinutes: 10,
+          cuisinePreferences: ["Mediterranean"],
+          notes: "No cilantro",
+        },
+      ],
+    });
+
+    // Waitlisted-only Guest B is refused FORBIDDEN until promoted.
+    const acceptB = await client.api.tables.accept({ session: guestB.session, token: table.token });
+    if ("error" in acceptB) throw new Error(acceptB.error);
+    expect(acceptB.place.position).toBe(1);
+    expect(await client.api.tables.profiles({ session: guestB.session, gathering: table.gathering })).toEqual({
+      error: "FORBIDDEN",
+    });
+
+    // Guest A withdraws: Guest A loses roster access, Guest B is promoted and gains roster access.
+    expect(await client.api.tables.withdraw({ session: guestA.session, gathering: table.gathering })).toEqual({ withdrawn: true });
+    expect(await client.api.tables.profiles({ session: guestA.session, gathering: table.gathering })).toEqual({
+      error: "FORBIDDEN",
+    });
+    const guestBRoster = await client.api.tables.profiles({ session: guestB.session, gathering: table.gathering });
+    if ("error" in guestBRoster) throw new Error(guestBRoster.error);
+    expect(guestBRoster.seated.map((entry) => entry.user)).toEqual([guestB.user]);
+
+    // Cancelling the table transitions /api/tables/profiles to CONFLICT.
+    expect(await client.gatherings.cancel({ session: host.session, gathering: table.gathering })).toEqual({});
+    expect(await client.api.tables.profiles({ session: host.session, gathering: table.gathering })).toEqual({
+      error: "CONFLICT",
+    });
+    expect(await client.api.tables.profiles({ session: host.session, gathering: "missing-gathering" })).toEqual({
+      error: "NOT_FOUND",
+    });
+    expect(await client.api.tables.profiles({ session: "missing-session", gathering: table.gathering })).toEqual({
+      error: "UNAUTHORIZED",
+    });
+  });
+
+  test("returns transport fault union when profile request is aborted", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const aborted = await client.api.profiles.me({ session: "any" }, { signal: controller.signal });
+    expect("error" in aborted).toBe(true);
+    if ("error" in aborted) {
+      expect(aborted.error).toBe("ABORTED");
+    }
+  });
 });

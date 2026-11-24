@@ -1,14 +1,17 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { authState, client, getStoredSession, logoutCurrentSession, setStoredSession } from "../auth-client.ts";
 
 const route = useRoute();
 const router = useRouter();
 const tables = ref<{ gathering: string; title: string; status: string; startTime: string }[]>([]);
+const displayName = ref("");
 const form = reactive({ title: "", area: "", startTime: "", endTime: "", cutoffTime: "", capacity: 4, confirmedVenue: "", details: "" });
 const busy = ref(false);
 const errorMessage = ref("");
+
+const shownName = computed(() => displayName.value || authState.user?.name || authState.user?.email || "");
 
 // what each refusal of a create means to the host
 const refusals: Record<string, string> = {
@@ -36,7 +39,19 @@ async function loadTables() {
   }
   tables.value = result.hosted.tables;
 }
-onMounted(loadTables);
+
+async function loadProfile() {
+  const result = await client.api.profiles.me({ session: getStoredSession() ?? "" });
+  if ("error" in result) {
+    if (result.error === "UNAUTHORIZED") await handleUnauthorized();
+    return;
+  }
+  displayName.value = result.displayName;
+}
+
+onMounted(() => {
+  void Promise.all([loadTables(), loadProfile()]);
+});
 
 async function createTable() {
   if (busy.value) return;
@@ -74,8 +89,13 @@ async function signOut() {
 <template>
   <main class="shell stack">
     <section class="card stack">
-      <strong>My tables</strong>
-      <div v-if="authState.user" class="muted">{{ authState.user.name ?? authState.user.email }}</div>
+      <div class="row">
+        <div>
+          <strong>My tables</strong>
+          <div v-if="authState.user" class="muted">{{ shownName }}</div>
+        </div>
+        <RouterLink to="/profile" class="link-btn small">Dining profile</RouterLink>
+      </div>
       <p v-if="tables.length === 0" class="muted">You have not created a table yet.</p>
       <RouterLink v-for="table in tables" :key="table.gathering" class="btn" :to="`/tables/${table.gathering}`">
         {{ table.title }}

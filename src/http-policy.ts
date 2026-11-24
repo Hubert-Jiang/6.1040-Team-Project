@@ -34,5 +34,10 @@ export const appHttpPolicy = httpPolicy({
     ALREADY_IN_POOL: "CONFLICT",
     POOL_CLOSED: "CONFLICT",
     CANNOT_CANCEL: "CONFLICT",
+    // profiles and table rosters
+    INVALID_DISTANCE: "INVALID_REQUEST",
+    INVALID_PROFILE: "INVALID_REQUEST",
+    TABLE_INACTIVE: "CONFLICT",
+    NOT_PARTICIPANT: "FORBIDDEN",
   },
 });

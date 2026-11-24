@@ -64,6 +64,57 @@ export type AppWire = {
     };
     error: { error: AppWideError | "INVALID_INPUT" | "NOT_CREATOR" | "UNKNOWN_SESSION" };
   };
+  "/api/profiles/clear": {
+    input: {
+      "session": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>[0], ["session"]>>;
+    };
+    output: {
+      "cleared": true;
+    };
+    error: { error: AppWideError | "INVALID_INPUT" | "UNKNOWN_SESSION" };
+  };
+  "/api/profiles/me": {
+    input: {
+      "session": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>[0], ["session"]>>;
+    };
+    output: {
+      "accountName": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.computations)["resolveDisplayName"]["fn"]>[0], ["accountName"]>, AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Authenticating"]["_getUser"]>>>, ["name"]>]>> | null;
+      "budgetPreferences": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["budgetPreferences"]>>;
+      "cuisinePreferences": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["cuisinePreferences"]>>;
+      "dietaryRestrictions": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["dietaryRestrictions"]>>;
+      "displayName": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["resolveDisplayName"]["fn"]>>, []>>;
+      "email": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.computations)["resolveDisplayName"]["fn"]>[0], ["email"]>, AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Authenticating"]["_getUser"]>>>, ["email"]>]>>;
+      "notes": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["notes"]>>;
+      "preferredName": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.computations)["resolveDisplayName"]["fn"]>[0], ["preferredName"]>, AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["preferredName"]>]>>;
+      "walkPreferenceMinutes": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["walkPreferenceMinutes"]>>;
+    } | {
+      "accountName": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.computations)["resolveDisplayName"]["fn"]>[0], ["accountName"]>, AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Authenticating"]["_getUser"]>>>, ["name"]>]>> | null;
+      "budgetPreferences": never[];
+      "cuisinePreferences": never[];
+      "dietaryRestrictions": never[];
+      "displayName": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["resolveDisplayName"]["fn"]>>, []>>;
+      "email": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.computations)["resolveDisplayName"]["fn"]>[0], ["email"]>, AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Authenticating"]["_getUser"]>>>, ["email"]>]>>;
+      "notes": null;
+      "preferredName": null;
+      "walkPreferenceMinutes": null;
+    };
+    error: { error: AppWideError | "INVALID_INPUT" | "UNKNOWN_SESSION" };
+  };
+  "/api/profiles/save": {
+    input: {
+      "budgetPreferences"?: Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Profiling"]["setProfile"]>[0], ["budgetPreferences"]>>;
+      "cuisinePreferences"?: Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Profiling"]["setProfile"]>[0], ["cuisinePreferences"]>>;
+      "dietaryRestrictions"?: Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Profiling"]["setProfile"]>[0], ["dietaryRestrictions"]>>;
+      "notes"?: Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Profiling"]["setProfile"]>[0], ["notes"]>>;
+      "preferredName"?: Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Profiling"]["setProfile"]>[0], ["preferredName"]>>;
+      "session": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>[0], ["session"]>>;
+      "walkPreferenceMinutes"?: Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Profiling"]["setProfile"]>[0], ["walkPreferenceMinutes"]>>;
+    };
+    output: {
+      "saved": true;
+    };
+    error: { error: AppWideError | "INVALID_DISTANCE" | "INVALID_INPUT" | "INVALID_PROFILE" | "UNKNOWN_SESSION" };
+  };
   "/api/tables/accept": {
     input: {
       "session": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>[0], ["session"]>>;
@@ -144,6 +195,56 @@ export type AppWire = {
       };
     };
     error: { error: AppWideError | "INVALID_INPUT" | "UNKNOWN_SESSION" };
+  };
+  "/api/tables/profiles": {
+    input: {
+      "gathering": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>[0], ["gathering"]>>;
+      "session": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>[0], ["session"]>>;
+    };
+    output: {
+      "host": {
+        "budgetPreferences": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["budgetPreferences"]>> | null;
+        "cuisinePreferences": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["cuisinePreferences"]>> | null;
+        "dietaryRestrictions": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["dietaryRestrictions"]>> | null;
+        "displayName": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["resolveDisplayName"]["fn"]>>, []>>;
+        "notes": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["notes"]>> | null;
+        "preferredName": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.computations)["resolveDisplayName"]["fn"]>[0], ["preferredName"]>, AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["preferredName"]>]>> | null;
+        "user": Jsonify<AllOf<[AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>>, ["subject"]>, AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Authenticating"]["_getUser"]>[0], ["user"]>, AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>[0], ["user"]>, AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>>>, ["host"]>]>>;
+        "walkPreferenceMinutes": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["walkPreferenceMinutes"]>> | null;
+      };
+      "seated": ({
+        "budgetPreferences": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["budgetPreferences"]>> | null;
+        "cuisinePreferences": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["cuisinePreferences"]>> | null;
+        "dietaryRestrictions": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["dietaryRestrictions"]>> | null;
+        "displayName": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["resolveDisplayName"]["fn"]>>, []>>;
+        "notes": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["notes"]>> | null;
+        "preferredName": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.computations)["resolveDisplayName"]["fn"]>[0], ["preferredName"]>, AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["preferredName"]>]>> | null;
+        "user": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Authenticating"]["_getUser"]>[0], ["user"]>, AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>[0], ["user"]>, AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Reserving"]["_getReservedUsers"]>>>, ["user"]>]>>;
+        "walkPreferenceMinutes": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["walkPreferenceMinutes"]>> | null;
+      })[];
+    } | {
+      "host": {
+        "budgetPreferences": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["budgetPreferences"]>> | null;
+        "cuisinePreferences": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["cuisinePreferences"]>> | null;
+        "dietaryRestrictions": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["dietaryRestrictions"]>> | null;
+        "displayName": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["resolveDisplayName"]["fn"]>>, []>>;
+        "notes": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["notes"]>> | null;
+        "preferredName": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.computations)["resolveDisplayName"]["fn"]>[0], ["preferredName"]>, AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["preferredName"]>]>> | null;
+        "user": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Authenticating"]["_getUser"]>[0], ["user"]>, AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>[0], ["user"]>, AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>>>, ["host"]>]>>;
+        "walkPreferenceMinutes": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["walkPreferenceMinutes"]>> | null;
+      };
+      "seated": ({
+        "budgetPreferences": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["budgetPreferences"]>> | null;
+        "cuisinePreferences": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["cuisinePreferences"]>> | null;
+        "dietaryRestrictions": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["dietaryRestrictions"]>> | null;
+        "displayName": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["resolveDisplayName"]["fn"]>>, []>>;
+        "notes": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["notes"]>> | null;
+        "preferredName": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.computations)["resolveDisplayName"]["fn"]>[0], ["preferredName"]>, AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["preferredName"]>]>> | null;
+        "user": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Authenticating"]["_getUser"]>[0], ["user"]>, AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>[0], ["user"]>, AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Reserving"]["_getReservedUsers"]>>>, ["user"]>]>>;
+        "walkPreferenceMinutes": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["walkPreferenceMinutes"]>> | null;
+      })[];
+    };
+    error: { error: AppWideError | "INVALID_INPUT" | "NOT_PARTICIPANT" | "NO_SUCH_TABLE" | "TABLE_INACTIVE" | "UNKNOWN_SESSION" };
   };
   "/api/tables/view": {
     input: {
@@ -386,6 +487,57 @@ export type AppWireHttp = {
     };
     error: { error: HttpAppWideError | "FORBIDDEN" | "INVALID_REQUEST" | "UNAUTHORIZED" };
   };
+  "/api/profiles/clear": {
+    input: {
+      "session": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>[0], ["session"]>>;
+    };
+    output: {
+      "cleared": true;
+    };
+    error: { error: HttpAppWideError | "INVALID_REQUEST" | "UNAUTHORIZED" };
+  };
+  "/api/profiles/me": {
+    input: {
+      "session": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>[0], ["session"]>>;
+    };
+    output: {
+      "accountName": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.computations)["resolveDisplayName"]["fn"]>[0], ["accountName"]>, AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Authenticating"]["_getUser"]>>>, ["name"]>]>> | null;
+      "budgetPreferences": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["budgetPreferences"]>>;
+      "cuisinePreferences": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["cuisinePreferences"]>>;
+      "dietaryRestrictions": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["dietaryRestrictions"]>>;
+      "displayName": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["resolveDisplayName"]["fn"]>>, []>>;
+      "email": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.computations)["resolveDisplayName"]["fn"]>[0], ["email"]>, AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Authenticating"]["_getUser"]>>>, ["email"]>]>>;
+      "notes": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["notes"]>>;
+      "preferredName": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.computations)["resolveDisplayName"]["fn"]>[0], ["preferredName"]>, AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["preferredName"]>]>>;
+      "walkPreferenceMinutes": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["walkPreferenceMinutes"]>>;
+    } | {
+      "accountName": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.computations)["resolveDisplayName"]["fn"]>[0], ["accountName"]>, AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Authenticating"]["_getUser"]>>>, ["name"]>]>> | null;
+      "budgetPreferences": never[];
+      "cuisinePreferences": never[];
+      "dietaryRestrictions": never[];
+      "displayName": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["resolveDisplayName"]["fn"]>>, []>>;
+      "email": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.computations)["resolveDisplayName"]["fn"]>[0], ["email"]>, AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Authenticating"]["_getUser"]>>>, ["email"]>]>>;
+      "notes": null;
+      "preferredName": null;
+      "walkPreferenceMinutes": null;
+    };
+    error: { error: HttpAppWideError | "INVALID_REQUEST" | "UNAUTHORIZED" };
+  };
+  "/api/profiles/save": {
+    input: {
+      "budgetPreferences"?: Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Profiling"]["setProfile"]>[0], ["budgetPreferences"]>>;
+      "cuisinePreferences"?: Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Profiling"]["setProfile"]>[0], ["cuisinePreferences"]>>;
+      "dietaryRestrictions"?: Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Profiling"]["setProfile"]>[0], ["dietaryRestrictions"]>>;
+      "notes"?: Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Profiling"]["setProfile"]>[0], ["notes"]>>;
+      "preferredName"?: Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Profiling"]["setProfile"]>[0], ["preferredName"]>>;
+      "session": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>[0], ["session"]>>;
+      "walkPreferenceMinutes"?: Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Profiling"]["setProfile"]>[0], ["walkPreferenceMinutes"]>>;
+    };
+    output: {
+      "saved": true;
+    };
+    error: { error: HttpAppWideError | "INVALID_REQUEST" | "UNAUTHORIZED" };
+  };
   "/api/tables/accept": {
     input: {
       "session": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>[0], ["session"]>>;
@@ -466,6 +618,56 @@ export type AppWireHttp = {
       };
     };
     error: { error: HttpAppWideError | "INVALID_REQUEST" | "UNAUTHORIZED" };
+  };
+  "/api/tables/profiles": {
+    input: {
+      "gathering": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>[0], ["gathering"]>>;
+      "session": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>[0], ["session"]>>;
+    };
+    output: {
+      "host": {
+        "budgetPreferences": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["budgetPreferences"]>> | null;
+        "cuisinePreferences": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["cuisinePreferences"]>> | null;
+        "dietaryRestrictions": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["dietaryRestrictions"]>> | null;
+        "displayName": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["resolveDisplayName"]["fn"]>>, []>>;
+        "notes": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["notes"]>> | null;
+        "preferredName": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.computations)["resolveDisplayName"]["fn"]>[0], ["preferredName"]>, AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["preferredName"]>]>> | null;
+        "user": Jsonify<AllOf<[AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>>, ["subject"]>, AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Authenticating"]["_getUser"]>[0], ["user"]>, AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>[0], ["user"]>, AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>>>, ["host"]>]>>;
+        "walkPreferenceMinutes": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["walkPreferenceMinutes"]>> | null;
+      };
+      "seated": ({
+        "budgetPreferences": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["budgetPreferences"]>> | null;
+        "cuisinePreferences": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["cuisinePreferences"]>> | null;
+        "dietaryRestrictions": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["dietaryRestrictions"]>> | null;
+        "displayName": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["resolveDisplayName"]["fn"]>>, []>>;
+        "notes": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["notes"]>> | null;
+        "preferredName": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.computations)["resolveDisplayName"]["fn"]>[0], ["preferredName"]>, AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["preferredName"]>]>> | null;
+        "user": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Authenticating"]["_getUser"]>[0], ["user"]>, AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>[0], ["user"]>, AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Reserving"]["_getReservedUsers"]>>>, ["user"]>]>>;
+        "walkPreferenceMinutes": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["walkPreferenceMinutes"]>> | null;
+      })[];
+    } | {
+      "host": {
+        "budgetPreferences": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["budgetPreferences"]>> | null;
+        "cuisinePreferences": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["cuisinePreferences"]>> | null;
+        "dietaryRestrictions": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["dietaryRestrictions"]>> | null;
+        "displayName": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["resolveDisplayName"]["fn"]>>, []>>;
+        "notes": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["notes"]>> | null;
+        "preferredName": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.computations)["resolveDisplayName"]["fn"]>[0], ["preferredName"]>, AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["preferredName"]>]>> | null;
+        "user": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Authenticating"]["_getUser"]>[0], ["user"]>, AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>[0], ["user"]>, AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>>>, ["host"]>]>>;
+        "walkPreferenceMinutes": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["walkPreferenceMinutes"]>> | null;
+      };
+      "seated": ({
+        "budgetPreferences": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["budgetPreferences"]>> | null;
+        "cuisinePreferences": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["cuisinePreferences"]>> | null;
+        "dietaryRestrictions": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["dietaryRestrictions"]>> | null;
+        "displayName": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["resolveDisplayName"]["fn"]>>, []>>;
+        "notes": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["notes"]>> | null;
+        "preferredName": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.computations)["resolveDisplayName"]["fn"]>[0], ["preferredName"]>, AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["preferredName"]>]>> | null;
+        "user": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Authenticating"]["_getUser"]>[0], ["user"]>, AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>[0], ["user"]>, AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Reserving"]["_getReservedUsers"]>>>, ["user"]>]>>;
+        "walkPreferenceMinutes": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Profiling"]["_getProfile"]>>>, ["walkPreferenceMinutes"]>> | null;
+      })[];
+    };
+    error: { error: HttpAppWideError | "CONFLICT" | "FORBIDDEN" | "INVALID_REQUEST" | "NOT_FOUND" | "UNAUTHORIZED" };
   };
   "/api/tables/view": {
     input: {

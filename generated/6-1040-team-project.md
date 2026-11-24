@@ -119,6 +119,26 @@ Defined in [Linking](../design/concepts/Linking.md), line 1.
   - `Creator` is `Authenticating.User` — [Application Types and Instances](../design/types.md), line 17.
   - `Target` is `Hosting.Gathering` — [Application Types and Instances](../design/types.md), line 16.
 
+### Profiling
+
+Defined in [Profiling](../design/concepts/Profiling.md), line 1.
+
+#### Actions
+
+- `setProfile(user: User, preferredName?: String, dietaryRestrictions: DietaryTagSet, budgetPreferences: BudgetTierSet, walkPreferenceMinutes?: Number, cuisinePreferences: CuisineSet, notes?: String) : returns ()`
+  - Refuses `INVALID_DISTANCE`: Preferred travel time must be a positive number.
+  - Refuses `INVALID_PROFILE`: Profile contains an invalid dietary tag, budget tier, or text exceeding length limits.
+- `clearProfile(user: User) : returns ()`
+
+#### Queries
+
+- `_getProfile(user: User) : optional (preferredName?: String, dietaryRestrictions: DietaryTagSet, budgetPreferences: BudgetTierSet, walkPreferenceMinutes?: Number, cuisinePreferences: CuisineSet, notes?: String)`
+
+#### Instances
+
+- `Profiling` — instance of `Profiling` — [Application Types and Instances](../design/types.md), line 21.
+  - `User` is `Authenticating.User` — [Application Types and Instances](../design/types.md), line 22.
+
 ### Reserving
 
 Defined in [Reserving](../design/concepts/Reserving.md), line 1.
@@ -186,10 +206,12 @@ Defined in [Sessioning](../design/concepts/Sessioning.md), line 1.
 - `hasSession(session?: String) : Flag` — [Auth](../design/compositions/Auth.md), line 33.
 - `hasText(value?: String) : Flag` — [Tables](../design/compositions/Tables.md), line 52.
 - `isAcceptingGuests(status: String, locked: Flag, cutoffTime: DateTime, now: DateTime) : Flag` — [Tables](../design/compositions/Tables.md), line 58.
+- `isActiveTableStatus(status: String) : Flag` — [Profiles](../design/compositions/Profiles.md), line 33.
 - `isValidCapacity(capacity?: Number) : Flag` — [Tables](../design/compositions/Tables.md), line 55.
 - `normalizeReturnTo(raw?: String) : String` — [Auth](../design/compositions/Auth.md), line 36.
 - `now() : DateTime` — [Auth](../design/compositions/Auth.md), line 27.
 - `parseTime(raw: String) : DateTime` — [Gatherings](../design/compositions/Gatherings.md), line 33.
+- `resolveDisplayName(preferredName?: String, accountName?: String, email: String) : String` — [Profiles](../design/compositions/Profiles.md), line 30.
 - `sessionLifetimeMs() : Number` — [Auth](../design/compositions/Auth.md), line 30.
 - `testAccountAffiliation(account?: String) : String` — [Auth](../design/compositions/Auth.md), line 54.
 - `testAccountEmail(account?: String) : String` — [Auth](../design/compositions/Auth.md), line 48.
@@ -215,6 +237,28 @@ Former "a guest's place at a table" — inputs (gathering, guest); bindings (res
     where whether Reserving._getWaitlistPosition (resource: gathering, user: guest) has (position)
     position
     reservation
+```
+
+### a participant's profile
+
+Authored path: `Profiles.Table.ParticipantProfile`.
+- Covered by [Profiles](../design/compositions/Profiles.md), line 21.
+
+```former
+Former "a participant's profile" — inputs (user); bindings (email, accountName, displayName, preferredName, dietaryRestrictions, budgetPreferences, walkPreferenceMinutes, cuisinePreferences, notes); promises exactly one record — forms:
+  a record of
+    where Authenticating._getUser (user) has (email)
+    where whether Authenticating._getUser (user) has (name: accountName)
+    where whether Profiling._getProfile (user) has (budgetPreferences, cuisinePreferences, dietaryRestrictions, notes, preferredName, walkPreferenceMinutes)
+    where displayName is resolveDisplayName (accountName, email, preferredName)
+    budgetPreferences
+    cuisinePreferences
+    dietaryRestrictions
+    displayName
+    notes
+    preferredName
+    user
+    walkPreferenceMinutes
 ```
 
 ### a table's links
@@ -264,6 +308,18 @@ Former "the host's tables" — inputs (host); bindings (gathering, title, status
         startTime
         status
         title
+```
+
+### the seated tablemates
+
+Authored path: `Profiles.Table.SeatedProfiles`.
+- Covered by [Profiles](../design/compositions/Profiles.md), line 21.
+
+```former
+Former "the seated tablemates" — inputs (gathering); bindings (user); promises exactly one record — forms:
+  each Reserving._getReservedUsers (resource: gathering) has (user)
+    form a record of
+      … former "a participant's profile" with (user)
 ```
 
 ## Reactions
@@ -847,6 +903,256 @@ where
   Reserving._getAvailability (resource: gathering) has (capacity, locked, remaining, reservedCount, waitlistCount)
 then
   RequestBoundary.respond (area, capacity, confirmedVenue, cutoffTime, details, endTime, locked, remaining, requestId, reservedCount, startTime, status, title, waitlistCount)
+```
+
+### Profiles.Self.ClearProfile
+
+Authored path: `Profiles.Self.ClearProfile`.
+- Covered by [Profiles](../design/compositions/Profiles.md), line 9.
+- Covered by [Profiles](../design/compositions/Profiles.md), line 14.
+
+```reaction
+when RequestBoundary.request (path: "/api/profiles/clear", requestId, session)
+where
+  now is now
+then
+  Sessioning.current (now, session)
+```
+
+### Profiles.Self.ClearProfile#2
+
+Authored path: `Profiles.Self.ClearProfile`.
+- Covered by [Profiles](../design/compositions/Profiles.md), line 9.
+- Covered by [Profiles](../design/compositions/Profiles.md), line 14.
+
+```reaction
+when Sessioning.current (now, session, subject: user), asked by Profiles.Self.ClearProfile
+then
+  Profiling.clearProfile (user)
+```
+
+### Profiles.Self.ClearProfile#3
+
+Authored path: `Profiles.Self.ClearProfile`.
+- Covered by [Profiles](../design/compositions/Profiles.md), line 9.
+- Covered by [Profiles](../design/compositions/Profiles.md), line 14.
+
+```reaction
+when Profiling.clearProfile (user), asked by Profiles.Self.ClearProfile#2
+where
+  earlier, RequestBoundary.request (path: "/api/profiles/clear", requestId, session)
+then
+  RequestBoundary.respond (cleared: true, requestId)
+```
+
+### Profiles.Self.GetProfile
+
+Authored path: `Profiles.Self.GetProfile`.
+- Covered by [Profiles](../design/compositions/Profiles.md), line 5.
+- Covered by [Profiles](../design/compositions/Profiles.md), line 12.
+
+```reaction
+when RequestBoundary.request (path: "/api/profiles/me", requestId, session)
+where
+  now is now
+then
+  Sessioning.current (now, session)
+```
+
+### Profiles.Self.GetProfile:unknown-user#2
+
+Authored path: `Profiles.Self.GetProfile`.
+- Covered by [Profiles](../design/compositions/Profiles.md), line 5.
+- Covered by [Profiles](../design/compositions/Profiles.md), line 12.
+
+```reaction
+when Sessioning.current (now, session, subject: user), asked by Profiles.Self.GetProfile
+where
+  no Authenticating._getUser (user)
+  earlier, RequestBoundary.request (path: "/api/profiles/me", requestId, session)
+then
+  RequestBoundary.respond (error: "UNKNOWN_SESSION", requestId)
+```
+
+### Profiles.Self.GetProfile:with-profile#2
+
+Authored path: `Profiles.Self.GetProfile`.
+- Covered by [Profiles](../design/compositions/Profiles.md), line 5.
+- Covered by [Profiles](../design/compositions/Profiles.md), line 12.
+
+```reaction
+when Sessioning.current (now, session, subject: user), asked by Profiles.Self.GetProfile
+where
+  Authenticating._getUser (user) has (email)
+  whether Authenticating._getUser (user) has (name: accountName)
+  Profiling._getProfile (user) has (budgetPreferences, cuisinePreferences, dietaryRestrictions, notes, preferredName, walkPreferenceMinutes)
+  displayName is resolveDisplayName (accountName, email, preferredName)
+  earlier, RequestBoundary.request (path: "/api/profiles/me", requestId, session)
+then
+  RequestBoundary.respond (accountName, budgetPreferences, cuisinePreferences, dietaryRestrictions, displayName, email, notes, preferredName, requestId, walkPreferenceMinutes)
+```
+
+### Profiles.Self.GetProfile:without-profile#2
+
+Authored path: `Profiles.Self.GetProfile`.
+- Covered by [Profiles](../design/compositions/Profiles.md), line 5.
+- Covered by [Profiles](../design/compositions/Profiles.md), line 12.
+
+```reaction
+when Sessioning.current (now, session, subject: user), asked by Profiles.Self.GetProfile
+where
+  Authenticating._getUser (user) has (email)
+  whether Authenticating._getUser (user) has (name: accountName)
+  no Profiling._getProfile (user)
+  displayName is resolveDisplayName (accountName, email, preferredName: null)
+  earlier, RequestBoundary.request (path: "/api/profiles/me", requestId, session)
+then
+  RequestBoundary.respond (accountName, budgetPreferences: [], cuisinePreferences: [], dietaryRestrictions: [], displayName, email, notes: null, preferredName: null, requestId, walkPreferenceMinutes: null)
+```
+
+### Profiles.Self.SaveProfile
+
+Authored path: `Profiles.Self.SaveProfile`.
+- Covered by [Profiles](../design/compositions/Profiles.md), line 7.
+- Covered by [Profiles](../design/compositions/Profiles.md), line 13.
+
+```reaction
+when RequestBoundary.request (budgetPreferences, cuisinePreferences, dietaryRestrictions, notes, path: "/api/profiles/save", preferredName, requestId, session, walkPreferenceMinutes)
+where
+  now is now
+then
+  Sessioning.current (now, session)
+```
+
+### Profiles.Self.SaveProfile#2
+
+Authored path: `Profiles.Self.SaveProfile`.
+- Covered by [Profiles](../design/compositions/Profiles.md), line 7.
+- Covered by [Profiles](../design/compositions/Profiles.md), line 13.
+
+```reaction
+when Sessioning.current (now, session, subject: user), asked by Profiles.Self.SaveProfile
+where
+  earlier, RequestBoundary.request (budgetPreferences, cuisinePreferences, dietaryRestrictions, notes, path: "/api/profiles/save", preferredName, requestId, session, walkPreferenceMinutes)
+then
+  Profiling.setProfile (budgetPreferences, cuisinePreferences, dietaryRestrictions, notes, preferredName, user, walkPreferenceMinutes)
+```
+
+### Profiles.Self.SaveProfile#3
+
+Authored path: `Profiles.Self.SaveProfile`.
+- Covered by [Profiles](../design/compositions/Profiles.md), line 7.
+- Covered by [Profiles](../design/compositions/Profiles.md), line 13.
+
+```reaction
+when Profiling.setProfile (budgetPreferences, cuisinePreferences, dietaryRestrictions, notes, preferredName, user, walkPreferenceMinutes), asked by Profiles.Self.SaveProfile#2
+where
+  earlier, RequestBoundary.request (budgetPreferences, cuisinePreferences, dietaryRestrictions, notes, path: "/api/profiles/save", preferredName, requestId, session, walkPreferenceMinutes)
+then
+  RequestBoundary.respond (requestId, saved: true)
+```
+
+### Profiles.Table.ViewTableProfiles
+
+Authored path: `Profiles.Table.ViewTableProfiles`.
+- Covered by [Profiles](../design/compositions/Profiles.md), line 19.
+- Covered by [Profiles](../design/compositions/Profiles.md), line 24.
+
+```reaction
+when RequestBoundary.request (gathering, path: "/api/tables/profiles", requestId, session)
+where
+  now is now
+then
+  Sessioning.current (now, session)
+```
+
+### Profiles.Table.ViewTableProfiles:host-viewer#2
+
+Authored path: `Profiles.Table.ViewTableProfiles`.
+- Covered by [Profiles](../design/compositions/Profiles.md), line 19.
+- Covered by [Profiles](../design/compositions/Profiles.md), line 24.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Profiles.Table.ViewTableProfiles
+where
+  earlier, RequestBoundary.request (gathering, path: "/api/tables/profiles", requestId, session)
+  Hosting._getDetails (gathering) has (host: viewer, status)
+  active is isActiveTableStatus (status)
+  active is among [true]
+then
+  RequestBoundary.respond (host: former "a participant's profile" with (user: viewer), requestId, seated: former "the seated tablemates" with (gathering))
+```
+
+### Profiles.Table.ViewTableProfiles:no-such-table#2
+
+Authored path: `Profiles.Table.ViewTableProfiles`.
+- Covered by [Profiles](../design/compositions/Profiles.md), line 19.
+- Covered by [Profiles](../design/compositions/Profiles.md), line 24.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Profiles.Table.ViewTableProfiles
+where
+  earlier, RequestBoundary.request (gathering, path: "/api/tables/profiles", requestId, session)
+  no Hosting._getDetails (gathering)
+then
+  RequestBoundary.respond (error: "NO_SUCH_TABLE", requestId)
+```
+
+### Profiles.Table.ViewTableProfiles:not-participant#2
+
+Authored path: `Profiles.Table.ViewTableProfiles`.
+- Covered by [Profiles](../design/compositions/Profiles.md), line 19.
+- Covered by [Profiles](../design/compositions/Profiles.md), line 24.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Profiles.Table.ViewTableProfiles
+where
+  earlier, RequestBoundary.request (gathering, path: "/api/tables/profiles", requestId, session)
+  Hosting._getDetails (gathering) has (status)
+  active is isActiveTableStatus (status)
+  active is among [true]
+  no Hosting._getDetails (gathering) has (host: viewer)
+  Reserving._hasReservation (resource: gathering, user: viewer) has (reserved)
+  reserved is among [false]
+then
+  RequestBoundary.respond (error: "NOT_PARTICIPANT", requestId)
+```
+
+### Profiles.Table.ViewTableProfiles:seated-viewer#2
+
+Authored path: `Profiles.Table.ViewTableProfiles`.
+- Covered by [Profiles](../design/compositions/Profiles.md), line 19.
+- Covered by [Profiles](../design/compositions/Profiles.md), line 24.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Profiles.Table.ViewTableProfiles
+where
+  earlier, RequestBoundary.request (gathering, path: "/api/tables/profiles", requestId, session)
+  Hosting._getDetails (gathering) has (host, status)
+  active is isActiveTableStatus (status)
+  active is among [true]
+  no Hosting._getDetails (gathering) has (host: viewer)
+  Reserving._hasReservation (resource: gathering, user: viewer) has (reserved)
+  reserved is among [true]
+then
+  RequestBoundary.respond (host: former "a participant's profile" with (user: host), requestId, seated: former "the seated tablemates" with (gathering))
+```
+
+### Profiles.Table.ViewTableProfiles:table-inactive#2
+
+Authored path: `Profiles.Table.ViewTableProfiles`.
+- Covered by [Profiles](../design/compositions/Profiles.md), line 19.
+- Covered by [Profiles](../design/compositions/Profiles.md), line 24.
+
+```reaction
+when Sessioning.current (now, session, subject: viewer), asked by Profiles.Table.ViewTableProfiles
+where
+  earlier, RequestBoundary.request (gathering, path: "/api/tables/profiles", requestId, session)
+  Hosting._getDetails (gathering) has (status)
+  active is isActiveTableStatus (status)
+  active is among [false]
+then
+  RequestBoundary.respond (error: "TABLE_INACTIVE", requestId)
 ```
 
 ### Tables.Hosting.CreateTable
@@ -1668,10 +1974,14 @@ not listed here have no explicit input contract.
 - `/api/links/create` — requires `session`, `gathering`; fills `label` with null when absent
 - `/api/links/list` — requires `session`, `gathering`
 - `/api/links/revoke` — requires `session`, `link`
+- `/api/profiles/clear` — requires `session`
+- `/api/profiles/me` — requires `session`
+- `/api/profiles/save` — requires `session`; fills `budgetPreferences` with [] when absent; fills `cuisinePreferences` with [] when absent; fills `dietaryRestrictions` with [] when absent; fills `notes` with null when absent; fills `preferredName` with null when absent; fills `walkPreferenceMinutes` with null when absent
 - `/api/tables/accept` — requires `session`, `token`
 - `/api/tables/create` — requires `session`, `title`, `area`, `startTime`, `endTime`, `cutoffTime`, `capacity`; fills `confirmedVenue` with null when absent; fills `details` with null when absent; fills `linkLabel` with null when absent; fills `scope` with null when absent
 - `/api/tables/mine` — requires `session`
 - `/api/tables/place` — requires `session`, `gathering`
+- `/api/tables/profiles` — requires `session`, `gathering`
 - `/api/tables/view` — requires `token`
 - `/api/tables/withdraw` — requires `session`, `gathering`
 - `/auth/logout` — requires `session`
