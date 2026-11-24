@@ -31,3 +31,6 @@ The venue lookup reads `GOOGLE_PLACES_API_KEY` from `.env` (see `.env.example`) 
 - [Design Summary](F3/design-summary.md)
 - [Visual Design Study](F3/visual-design-study/visual-design-study.md) ([slides](F3/visual-design-study/visual-design-study.pptx), [PDF](F3/visual-design-study/visual-design-study.pdf))
 - [Development Plan](F3/development-plan.md)
+
+## F4
+- [Demo Video](https://www.youtube.com/watch?v=HpyiHsR-SRs)
