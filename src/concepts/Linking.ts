@@ -71,6 +71,13 @@ export class LinkingConcept {
     return {};
   }
 
+  /** Turns the link on. Raises NotCreator for an unknown link or anyone but its creator. Activating twice is harmless. */
+  async activateLink({ link, creator }: { link: string; creator: string }) {
+    const { matchedCount } = await this.links.updateOne({ _id: link, creator }, { $set: { active: true } });
+    if (!matchedCount) throw new NotCreator("Only the link creator can activate this link.");
+    return {};
+  }
+
   /** Turns off every link to the target. */
   async revokeAllForTarget({ target }: { target: string }) {
     await this.links.updateMany({ target, active: true }, { $set: { active: false } });

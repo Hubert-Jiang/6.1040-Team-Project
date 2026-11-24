@@ -95,3 +95,32 @@ test("a host's links are listed active first, then oldest first, with empty labe
   ]);
   expect(await links._listForTarget({ target: "nothing" })).toEqual([]);
 });
+
+test("only the creator can activate a link, and activating twice is harmless", async () => {
+  const { link, token } = await links.createLink({ target: "dinner", creator: "noah", now: at(0) });
+  await links.revokeLink({ link, creator: "noah" });
+
+  await expect(links.activateLink({ link, creator: "alice" })).rejects.toBeInstanceOf(NotCreator);
+  await expect(links.activateLink({ link: "no-such-link", creator: "noah" })).rejects.toBeInstanceOf(NotCreator);
+  // the refused activations left the link inactive
+  expect(await links._resolve({ token, now: at(1) })).toEqual([]);
+
+  expect(await links.activateLink({ link, creator: "noah" })).toEqual({});
+  expect(await links.activateLink({ link, creator: "noah" })).toEqual({});
+  expect(await links._resolve({ token, now: at(1) })).toEqual([{ target: "dinner", link }]);
+  expect(await links._listForTarget({ target: "dinner" })).toEqual([
+    { link, token, label: undefined, active: true, expiresAt: undefined },
+  ]);
+});
+
+test("activating an expired link restores active state without resolving past its expiry", async () => {
+  const { link, token } = await links.createLink({ target: "dinner", creator: "noah", expiresAt: at(2), now: at(0) });
+  await links.revokeLink({ link, creator: "noah" });
+
+  expect(await links.activateLink({ link, creator: "noah" })).toEqual({});
+  expect(await links._resolve({ token, now: at(1) })).toEqual([{ target: "dinner", link }]);
+  expect(await links._resolve({ token, now: at(2) })).toEqual([]);
+  expect(await links._listForTarget({ target: "dinner" })).toEqual([
+    { link, token, label: undefined, active: true, expiresAt: at(2) },
+  ]);
+});

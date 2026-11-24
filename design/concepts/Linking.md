@@ -2,11 +2,11 @@
 
 ## Purpose
 
-Issue, resolve, and revoke unguessable shareable links for target resources so an owner can share one link across a group or issue separate channel links without tying links to individual user identities.
+Issue, resolve, revoke, and reactivate unguessable shareable links for target resources so an owner can share one link across a group or issue separate channel links without tying links to individual user identities.
 
 ## Principle
 
-A creator generates a shareable link token pointing to a target resource, optionally labeled by channel or given an expiration time. Anyone who presents an active, unexpired token resolves it to the target; revoking a link stops future access through that token without affecting the target's other links.
+A creator generates a shareable link token pointing to a target resource, optionally labeled by channel or given an expiration time. Anyone who presents an active, unexpired token resolves it to the target; revoking a link stops future access through that token without affecting the target's other links, and the creator can reactivate a revoked link later.
 
 ## Types
 
@@ -15,7 +15,7 @@ external Target
   The resource or gathering that a shareable link points to.
 
 external Creator
-  The user permitted to create and revoke links for a target.
+  The user permitted to create, revoke, and activate links for a target.
 ```
 
 ## State
@@ -51,6 +51,15 @@ revokeLink (link: Link, creator: Creator) : returns ()
   where link is in Links and link's creator is creator
   then
     set link's active to false
+    returns
+
+activateLink (link: Link, creator: Creator) : returns ()
+  where link is not in Links or link's creator is not creator
+  then
+    refuses NOT_CREATOR "Only the link creator can activate this link."
+  where link is in Links and link's creator is creator
+  then
+    set link's active to true
     returns
 
 revokeAllForTarget (target: Target) : returns ()

@@ -39,12 +39,13 @@ Tables.Joining.MyPlace at /api/tables/place
 
 ## Sharing links
 
-Only the table's host can manage its links. Each of these endpoints resolves the host through `Sessioning.current` with [current time](computation:now) first. A host can [create another link](reaction:Tables.Sharing.CreateLink) for one of their gatherings with an optional label, for example one per group chat; `Hosting._getDetails` must name the session's user as host, or the endpoint answers `NOT_HOST`. A host can [list a table's links](reaction:Tables.Sharing.ListLinks) under the same check, answered by [a table's links](former:Tables.Sharing.TableLinks): every link from `Linking._listForTarget` with its identity, token, label, whether it is active, and its expiry, active links first. A host can [revoke a link](reaction:Tables.Sharing.RevokeLink); `Linking.revokeLink` refuses `NOT_CREATOR` for anyone but the link's creator, and a revoked link stops resolving while the table's other links keep working.
+Only the table's host can manage its links. Each of these endpoints resolves the host through `Sessioning.current` with [current time](computation:now) first, refusing `UNKNOWN_SESSION` when the session is not active. A host can [create another link](reaction:Tables.Sharing.CreateLink) for one of their gatherings with an optional label, for example one per group chat; `Hosting._getDetails` must name the session's user as host, or the endpoint answers `NOT_HOST`. A host can [list a table's links](reaction:Tables.Sharing.ListLinks) under the same check, answered by [a table's links](former:Tables.Sharing.TableLinks): every link from `Linking._listForTarget` with its identity, token, label, whether it is active, and its expiry, active links first. A host can [revoke a link](reaction:Tables.Sharing.RevokeLink); `Linking.revokeLink` refuses `NOT_CREATOR` for anyone but the link's creator, and a revoked link stops resolving while the table's other links keep working. A host can also [activate a link](reaction:Tables.Sharing.ActivateLink) by sending their `session` and `link`; after `Sessioning.current` resolves the host, `Linking.activateLink` refuses `NOT_CREATOR` for an unknown link or anyone other than the link's creator with no partial effect, and otherwise sets the link active (idempotently if already active) so unexpired tokens resolve again, returning `activated: true`.
 
 ```endpoints
 Tables.Sharing.CreateLink at /api/links/create
 Tables.Sharing.ListLinks at /api/links/list
 Tables.Sharing.RevokeLink at /api/links/revoke
+Tables.Sharing.ActivateLink at /api/links/activate
 ```
 
 ```computations

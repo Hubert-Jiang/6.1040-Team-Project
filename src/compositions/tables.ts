@@ -255,6 +255,16 @@ const RevokeLink = endpoint(
   { input: { required: ["session", "link"] } },
 );
 
+const ActivateLink = endpoint(
+  "/api/links/activate",
+  ({ session, link, now, host }) =>
+    receive({ session, link })
+      .then(where(compute(computations.now, {}, now)).then(Sessioning.current({ session, now }).responds({ subject: host })))
+      .then(Linking.activateLink({ link, creator: host }))
+      .then(respond({ activated: true })),
+  { input: { required: ["session", "link"] } },
+);
+
 const AcceptTable = endpoint(
   "/api/tables/accept",
   ({ session, token, now, guest, gathering, status, cutoffTime, scope, locked, accepting, scoped, matches }) => {
@@ -374,5 +384,5 @@ export const tablesComposition = {
   Hosting: { CreateTable, MyTables, HostedTables },
   Viewing: { ViewTable },
   Joining: { AcceptTable, WithdrawTable, GuestPlace, MyPlace },
-  Sharing: { CreateLink, ListLinks, RevokeLink, TableLinks },
+  Sharing: { CreateLink, ListLinks, RevokeLink, ActivateLink, TableLinks },
 };

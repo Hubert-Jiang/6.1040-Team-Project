@@ -104,6 +104,8 @@ Defined in [Linking](../design/concepts/Linking.md), line 1.
   - Refuses `INVALID_EXPIRY`: Link expiration must be in the future.
 - `revokeLink(link: Link, creator: Creator) : returns ()`
   - Refuses `NOT_CREATOR`: Only the link creator can revoke this link.
+- `activateLink(link: Link, creator: Creator) : returns ()`
+  - Refuses `NOT_CREATOR`: Only the link creator can activate this link.
 - `revokeAllForTarget(target: Target) : returns ()`
 
 #### Queries
@@ -182,9 +184,9 @@ Defined in [Sessioning](../design/concepts/Sessioning.md), line 1.
 
 - `buildPetrockAuthUrl(state: String) : String` — [Auth](../design/compositions/Auth.md), line 39.
 - `hasSession(session?: String) : Flag` — [Auth](../design/compositions/Auth.md), line 33.
-- `hasText(value?: String) : Flag` — [Tables](../design/compositions/Tables.md), line 51.
-- `isAcceptingGuests(status: String, locked: Flag, cutoffTime: DateTime, now: DateTime) : Flag` — [Tables](../design/compositions/Tables.md), line 57.
-- `isValidCapacity(capacity?: Number) : Flag` — [Tables](../design/compositions/Tables.md), line 54.
+- `hasText(value?: String) : Flag` — [Tables](../design/compositions/Tables.md), line 52.
+- `isAcceptingGuests(status: String, locked: Flag, cutoffTime: DateTime, now: DateTime) : Flag` — [Tables](../design/compositions/Tables.md), line 58.
+- `isValidCapacity(capacity?: Number) : Flag` — [Tables](../design/compositions/Tables.md), line 55.
 - `normalizeReturnTo(raw?: String) : String` — [Auth](../design/compositions/Auth.md), line 36.
 - `now() : DateTime` — [Auth](../design/compositions/Auth.md), line 27.
 - `parseTime(raw: String) : DateTime` — [Gatherings](../design/compositions/Gatherings.md), line 33.
@@ -1437,6 +1439,48 @@ then
   RequestBoundary.respond (requestId, withdrawn: true)
 ```
 
+### Tables.Sharing.ActivateLink
+
+Authored path: `Tables.Sharing.ActivateLink`.
+- Covered by [Tables](../design/compositions/Tables.md), line 42.
+- Covered by [Tables](../design/compositions/Tables.md), line 48.
+
+```reaction
+when RequestBoundary.request (link, path: "/api/links/activate", requestId, session)
+where
+  now is now
+then
+  Sessioning.current (now, session)
+```
+
+### Tables.Sharing.ActivateLink#2
+
+Authored path: `Tables.Sharing.ActivateLink`.
+- Covered by [Tables](../design/compositions/Tables.md), line 42.
+- Covered by [Tables](../design/compositions/Tables.md), line 48.
+
+```reaction
+when Sessioning.current (now, session, subject: host), asked by Tables.Sharing.ActivateLink
+where
+  earlier, RequestBoundary.request (link, path: "/api/links/activate", requestId, session)
+then
+  Linking.activateLink (creator: host, link)
+```
+
+### Tables.Sharing.ActivateLink#3
+
+Authored path: `Tables.Sharing.ActivateLink`.
+- Covered by [Tables](../design/compositions/Tables.md), line 42.
+- Covered by [Tables](../design/compositions/Tables.md), line 48.
+
+```reaction
+when Linking.activateLink (creator: host, link), asked by Tables.Sharing.ActivateLink#2
+where
+  earlier, RequestBoundary.request (link, path: "/api/links/activate", requestId, session)
+then
+  RequestBoundary.respond (activated: true, requestId)
+```
+
 ### Tables.Sharing.CreateLink
 
 Authored path: `Tables.Sharing.CreateLink`.
@@ -1620,6 +1664,7 @@ object or lacks a required key. The response uses `INVALID_INPUT` and names
 the path or missing key. A declared default fills an absent key. Endpoints
 not listed here have no explicit input contract.
 
+- `/api/links/activate` — requires `session`, `link`
 - `/api/links/create` — requires `session`, `gathering`; fills `label` with null when absent
 - `/api/links/list` — requires `session`, `gathering`
 - `/api/links/revoke` — requires `session`, `link`

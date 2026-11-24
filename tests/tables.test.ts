@@ -173,6 +173,36 @@ test("only the host can add, list, or revoke a table's links", async () => {
   expect("error" in (await client.api.tables.view({ token: created.token }))).toBe(false);
 });
 
+test("a host can reactivate a revoked link, restoring view and accept while keeping non-creators and bad sessions refused", async () => {
+  const noah = await signIn("noah@mit.edu");
+  const alice = await signIn("alice@mit.edu");
+  const ana = await signIn("ana@mit.edu");
+  const created = await createTable(noah.session, { linkLabel: "Dorm list" });
+
+  expect(await client.api.links.revoke({ session: noah.session, link: created.link })).toEqual({ revoked: true });
+  expect(await client.api.tables.view({ token: created.token })).toEqual({ error: "NOT_FOUND" });
+  expect(await client.api.tables.accept({ session: ana.session, token: created.token })).toEqual({ error: "NOT_FOUND" });
+
+  // non-creators, unknown links, and invalid sessions are refused without turning the link back on
+  expect(await client.api.links.activate({ session: alice.session, link: created.link })).toEqual({ error: "FORBIDDEN" });
+  expect(await client.api.links.activate({ session: noah.session, link: "no-such-link" })).toEqual({ error: "FORBIDDEN" });
+  expect(await client.api.links.activate({ session: "not-a-session", link: created.link })).toEqual({ error: "UNAUTHORIZED" });
+  expect(await client.api.tables.view({ token: created.token })).toEqual({ error: "NOT_FOUND" });
+
+  // the creator reactivates the link (idempotently), restoring view, accept, and active listing
+  expect(await client.api.links.activate({ session: noah.session, link: created.link })).toEqual({ activated: true });
+  expect(await client.api.links.activate({ session: noah.session, link: created.link })).toEqual({ activated: true });
+
+  const listed = await client.api.links.list({ session: noah.session, gathering: created.gathering });
+  if ("error" in listed) throw new Error(listed.error);
+  expect(listed.shared.links.map((l) => [l.label, l.active])).toEqual([["Dorm list", true]]);
+
+  const view = await client.api.tables.view({ token: created.token });
+  if ("error" in view) throw new Error(view.error);
+  expect(view.gathering).toBe(created.gathering);
+  expect(typeof (await accept(ana.session, created.token)).reservation).toBe("string");
+});
+
 /** Accepts a table by its token and fails the test with the error if that was refused. */
 async function accept(session: string, token: string) {
   const accepted = await client.api.tables.accept({ session, token });

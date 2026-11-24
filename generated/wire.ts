@@ -14,6 +14,16 @@ export type Json = null | boolean | number | string | Json[] | { [key: string]: 
 export type AppWideError = never;
 
 export type AppWire = {
+  "/api/links/activate": {
+    input: {
+      "link": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Linking"]["activateLink"]>[0], ["link"]>>;
+      "session": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>[0], ["session"]>>;
+    };
+    output: {
+      "activated": true;
+    };
+    error: { error: AppWideError | "INVALID_INPUT" | "NOT_CREATOR" | "UNKNOWN_SESSION" };
+  };
   "/api/links/create": {
     input: {
       "gathering": Jsonify<OneOf<[AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Linking"]["createLink"]>[0], ["target"]>, AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>[0], ["gathering"]>]>>;
@@ -326,6 +336,16 @@ export type AppWire = {
 export type HttpAppWideError = never;
 
 export type AppWireHttp = {
+  "/api/links/activate": {
+    input: {
+      "link": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Linking"]["activateLink"]>[0], ["link"]>>;
+      "session": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>[0], ["session"]>>;
+    };
+    output: {
+      "activated": true;
+    };
+    error: { error: HttpAppWideError | "FORBIDDEN" | "INVALID_REQUEST" | "UNAUTHORIZED" };
+  };
   "/api/links/create": {
     input: {
       "gathering": Jsonify<OneOf<[AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Linking"]["createLink"]>[0], ["target"]>, AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>[0], ["gathering"]>]>>;

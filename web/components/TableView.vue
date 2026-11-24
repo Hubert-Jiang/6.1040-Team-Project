@@ -38,24 +38,48 @@ interface LinkRow {
 const links = ref<LinkRow[]>([]);
 const newLabel = ref("");
 const copied = ref("");
+const togglingLink = ref<string | null>(null);
+let copiedTimer: ReturnType<typeof setTimeout> | null = null;
 const shareUrl = (token: string) => `${window.location.origin}/invite/${token}`;
 
-// guests reach a table only through a share link, so the host makes one per group chat and can turn any off
+function clearCopied() {
+  if (copiedTimer !== null) {
+    clearTimeout(copiedTimer);
+    copiedTimer = null;
+  }
+  copied.value = "";
+}
+
+// guests reach a table only through a share link, so the host makes one per group chat and can toggle any off or on
 async function loadLinks(generation = loadGeneration) {
   const currentId = tableId.value;
   const listed = await client.api.links.list({ session: getStoredSession() ?? "", gathering: currentId });
   if (generation !== loadGeneration || tableId.value !== currentId) return;
-  links.value = "error" in listed ? [] : (listed.shared.links as LinkRow[]);
+  if ("error" in listed) {
+    if (listed.error === "UNAUTHORIZED") {
+      await handleUnauthorized();
+      return;
+    }
+    links.value = [];
+    return;
+  }
+  links.value = listed.shared.links as LinkRow[];
 }
 
 async function addLink() {
+  if (actionInFlight.value) return;
   actionInFlight.value = true;
   try {
     const result = await client.api.links.create({ session: getStoredSession() ?? "", gathering: tableId.value, label: newLabel.value.trim() || null });
     if ("error" in result) {
+      if (result.error === "UNAUTHORIZED") {
+        await handleUnauthorized();
+        return;
+      }
       errorMessage.value = "Could not make a link.";
       return;
     }
+    errorMessage.value = "";
     newLabel.value = "";
     await loadLinks();
   } finally {
@@ -63,20 +87,49 @@ async function addLink() {
   }
 }
 
-async function revoke(link: string) {
+async function toggleLink(link: LinkRow) {
+  if (togglingLink.value || actionInFlight.value) return;
+  togglingLink.value = link.link;
   actionInFlight.value = true;
   try {
-    const result = await client.api.links.revoke({ session: getStoredSession() ?? "", link });
-    if ("error" in result) errorMessage.value = "Could not turn off that link.";
+    const session = getStoredSession() ?? "";
+    const result = link.active
+      ? await client.api.links.revoke({ session, link: link.link })
+      : await client.api.links.activate({ session, link: link.link });
+    if ("error" in result) {
+      if (result.error === "UNAUTHORIZED") {
+        await handleUnauthorized();
+        return;
+      }
+      errorMessage.value = link.active ? "Could not turn off that link." : "Could not turn on that link.";
+    } else {
+      errorMessage.value = "";
+      if (link.active && copied.value === link.token) {
+        clearCopied();
+      }
+    }
     await loadLinks();
   } finally {
+    togglingLink.value = null;
     actionInFlight.value = false;
   }
 }
 
 async function copy(token: string) {
-  await navigator.clipboard.writeText(shareUrl(token));
+  try {
+    await navigator.clipboard.writeText(shareUrl(token));
+  } catch {
+    errorMessage.value = "Could not copy that link.";
+    return;
+  }
+  clearCopied();
   copied.value = token;
+  copiedTimer = setTimeout(() => {
+    if (copied.value === token) {
+      copied.value = "";
+    }
+    copiedTimer = null;
+  }, 2000);
 }
 
 const shown = (time: string) => new Date(time).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
@@ -128,7 +181,7 @@ async function initForTable() {
   loaded.value = false;
   errorMessage.value = "";
   links.value = [];
-  copied.value = "";
+  clearCopied();
   await load();
   if (generation === loadGeneration && tableId.value === currentId && table.value) {
     await loadLinks(generation);
@@ -149,6 +202,7 @@ watch(tableId, async (next, prev) => {
 
 onUnmounted(() => {
   refresher.stop();
+  clearCopied();
 });
 
 async function act(action: "confirm" | "book" | "cancel") {
@@ -213,12 +267,38 @@ async function signOut() {
       <p v-if="links.length === 0" class="muted">Guests join through a link. Make one for each group chat you post in.</p>
       <ul v-else class="list">
         <li v-for="l in links" :key="l.link">
-          <div class="row">
-            <span>{{ l.label || "Unnamed link" }}<span v-if="!l.active" class="muted"> (turned off)</span></span>
-            <span v-if="l.active" class="actions">
-              <RouterLink class="link-btn" :to="`/invite/${l.token}`">Open</RouterLink>
-              <button type="button" class="link-btn" @click="copy(l.token)">{{ copied === l.token ? "Copied" : "Copy" }}</button>
-              <button type="button" class="link-btn danger" @click="revoke(l.link)">Turn off</button>
+          <div class="share-row">
+            <RouterLink v-if="l.active" class="share-link-label share-link-open" :to="`/invite/${l.token}`">
+              {{ l.label || "Unnamed link" }}
+            </RouterLink>
+            <span v-else class="share-link-label share-link-inactive">{{ l.label || "Unnamed link" }}</span>
+            <span class="actions">
+              <button
+                v-if="l.active"
+                type="button"
+                :class="['copy-btn', { copied: copied === l.token }]"
+                @click="copy(l.token)"
+              >
+                <svg v-if="copied === l.token" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M3.5 8.5 6.5 11.5 12.5 4.5" />
+                </svg>
+                <svg v-else width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" />
+                  <path d="M3.5 10.5H3a1.5 1.5 0 0 1-1.5-1.5V3A1.5 1.5 0 0 1 3 1.5h6A1.5 1.5 0 0 1 10.5 3v.5" />
+                </svg>
+                <span>{{ copied === l.token ? "Copied" : "Copy" }}</span>
+              </button>
+              <button
+                type="button"
+                role="switch"
+                :aria-checked="l.active"
+                :aria-label="`${l.active ? 'Turn off' : 'Turn on'} ${l.label || 'Unnamed link'}`"
+                :class="['toggle-switch', { on: l.active }]"
+                :disabled="actionInFlight || togglingLink === l.link"
+                @click="toggleLink(l)"
+              >
+                <span class="toggle-knob" aria-hidden="true" />
+              </button>
             </span>
           </div>
         </li>
