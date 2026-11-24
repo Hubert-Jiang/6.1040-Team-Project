@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { authState, client, getStoredSession, logoutCurrentSession, refreshAuth } from "../auth-client.ts";
+import { authState, client, getStoredSession, logoutCurrentSession, refreshAuth, setStoredSession } from "../auth-client.ts";
+import { createLiveRefresher } from "../live-refresh.ts";
 
 interface TableDetails {
   gathering: string;
@@ -28,10 +29,12 @@ const token = computed(() => String(route.params.token ?? ""));
 const table = ref<TableDetails | null>(null);
 const notFound = ref(false);
 const hosting = ref(false);
+const hostAcceptAttempted = ref(false);
 const place = ref<{ reservation: string | null; position: number | null } | null>(null);
 const busy = ref(false);
 const message = ref("");
 const errorMessage = ref("");
+let loadGeneration = 0;
 
 const session = () => getStoredSession() ?? "";
 const signedIn = computed(() => authState.user !== null);
@@ -40,23 +43,60 @@ const waitlisted = computed(() => place.value?.position != null);
 const when = (iso: string) =>
   new Date(iso).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
-async function loadTable() {
-  const view = await client.api.tables.view({ token: token.value });
+async function loadTable(options: { background?: boolean } = {}): Promise<boolean> {
+  const currentToken = token.value;
+  const generation = loadGeneration;
+  const view = await client.api.tables.view({ token: currentToken });
+  if (generation !== loadGeneration || token.value !== currentToken) return false;
   if ("error" in view) {
-    notFound.value = true;
-    table.value = null;
-    return;
+    if (!options.background || view.error === "NOT_FOUND") {
+      notFound.value = true;
+      table.value = null;
+    }
+    return false;
   }
+  notFound.value = false;
   table.value = { ...view, startTime: String(view.startTime), endTime: String(view.endTime), cutoffTime: String(view.cutoffTime) } as TableDetails;
+  return true;
 }
 
-async function loadMine() {
+async function loadMine(generation = loadGeneration) {
   if (!table.value || !signedIn.value) return;
+  const currentToken = token.value;
   const mine = await client.api.tables.place({ session: session(), gathering: table.value.gathering });
-  if ("error" in mine) return;
+  if (generation !== loadGeneration || token.value !== currentToken) return;
+  if ("error" in mine) {
+    if (mine.error === "UNAUTHORIZED") {
+      setStoredSession(null);
+      authState.user = null;
+      authState.checked = true;
+      hosting.value = false;
+      hostAcceptAttempted.value = false;
+      place.value = null;
+    }
+    return;
+  }
   hosting.value = mine.hosting;
+  if (!mine.hosting) {
+    hostAcceptAttempted.value = false;
+  }
   place.value = { reservation: mine.place.reservation ?? null, position: mine.place.position ?? null };
 }
+
+async function refreshLive() {
+  if (busy.value || notFound.value || !table.value) return;
+  const generation = loadGeneration;
+  const ok = await loadTable({ background: true });
+  if (!ok || generation !== loadGeneration || busy.value || notFound.value || !table.value) return;
+  if (signedIn.value) {
+    await loadMine(generation);
+  }
+}
+
+const refresher = createLiveRefresher({
+  refresh: refreshLive,
+  isPaused: () => busy.value || notFound.value || !table.value,
+});
 
 
 const ACCEPT_ERRORS: Record<string, string> = {
@@ -69,32 +109,48 @@ const ACCEPT_ERRORS: Record<string, string> = {
 async function accept() {
   if (!signedIn.value) {
     // login keeps this path, so the accept finishes when the guest lands back here
-    await router.push({ path: "/login", query: { redirect: `/t/${token.value}?accept=1` } });
+    await router.push({ path: "/login", query: { redirect: `/invite/${token.value}?accept=1` } });
     return;
   }
+  hostAcceptAttempted.value = false;
   busy.value = true;
   errorMessage.value = "";
-  const result = await client.api.tables.accept({ session: session(), token: token.value });
-  busy.value = false;
-  if ("error" in result) {
-    errorMessage.value = ACCEPT_ERRORS[result.error] ?? `Could not accept (${result.error}).`;
-    return;
+  message.value = "";
+  try {
+    const result = await client.api.tables.accept({ session: session(), token: token.value });
+    if ("error" in result) {
+      if (result.error === "CONFLICT") {
+        await loadMine();
+        if (hosting.value) {
+          hostAcceptAttempted.value = true;
+          return;
+        }
+      }
+      errorMessage.value = ACCEPT_ERRORS[result.error] ?? `Could not accept (${result.error}).`;
+      return;
+    }
+    await Promise.all([loadTable(), loadMine()]);
+  } finally {
+    busy.value = false;
   }
-  await Promise.all([loadTable(), loadMine()]);
 }
 
 async function withdraw() {
   if (!table.value) return;
   busy.value = true;
   errorMessage.value = "";
-  const result = await client.api.tables.withdraw({ session: session(), gathering: table.value.gathering });
-  busy.value = false;
-  if ("error" in result) {
-    errorMessage.value = result.error === "CONFLICT" ? "Seats are locked, so you can no longer withdraw." : `Could not withdraw (${result.error}).`;
-    return;
+  message.value = "";
+  try {
+    const result = await client.api.tables.withdraw({ session: session(), gathering: table.value.gathering });
+    if ("error" in result) {
+      errorMessage.value = result.error === "CONFLICT" ? "Seats are locked, so you can no longer withdraw." : `Could not withdraw (${result.error}).`;
+      return;
+    }
+    message.value = "You withdrew. You can accept again while the table is open.";
+    await Promise.all([loadTable(), loadMine()]);
+  } finally {
+    busy.value = false;
   }
-  message.value = "You withdrew. You can accept again while the table is open.";
-  await Promise.all([loadTable(), loadMine()]);
 }
 
 
@@ -103,21 +159,57 @@ async function withdraw() {
 async function signOut() {
   await logoutCurrentSession();
   hosting.value = false;
+  hostAcceptAttempted.value = false;
   place.value = null;
   message.value = "";
   errorMessage.value = "";
 }
 
-onMounted(async () => {
+function resetForToken() {
+  loadGeneration += 1;
+  table.value = null;
+  notFound.value = false;
+  hosting.value = false;
+  hostAcceptAttempted.value = false;
+  place.value = null;
+  message.value = "";
+  errorMessage.value = "";
+}
+
+async function initForToken() {
+  const generation = loadGeneration;
   if (!authState.checked) await refreshAuth();
+  if (generation !== loadGeneration) return;
   await loadTable();
-  await loadMine();
+  if (generation !== loadGeneration) return;
+  await loadMine(generation);
+  if (generation !== loadGeneration) return;
   if (route.query.accept === "1") {
     await router.replace({ path: route.path });
+    if (generation !== loadGeneration) return;
     if (table.value && signedIn.value && hosting.value) {
-      errorMessage.value = `You signed in as ${authState.user?.email}, the host of this table, so nothing was accepted. Sign out and sign in with the other test account to accept as a guest.`;
-    } else if (table.value && signedIn.value && !seated.value && !waitlisted.value) await accept();
+      hostAcceptAttempted.value = true;
+    } else if (table.value && signedIn.value && !seated.value && !waitlisted.value) {
+      await accept();
+    }
   }
+}
+
+onMounted(async () => {
+  await initForToken();
+  refresher.start();
+});
+
+watch(token, async (next, prev) => {
+  if (next === prev || !next) return;
+  refresher.stop();
+  resetForToken();
+  await initForToken();
+  refresher.start();
+});
+
+onUnmounted(() => {
+  refresher.stop();
 });
 </script>
 
@@ -150,7 +242,8 @@ onMounted(async () => {
       </div>
 
       <template v-if="hosting">
-        <p class="muted">You're hosting this table, so you can't take a seat here. To try it as a guest, open the link in a private window and sign in with the other test account.</p>
+        <p v-if="hostAcceptAttempted" class="error">You're hosting this table, so no seat was accepted.</p>
+        <p v-else class="muted">You're hosting this table.</p>
         <RouterLink class="btn" :to="`/tables/${table.gathering}`">Manage this table and its links</RouterLink>
       </template>
 

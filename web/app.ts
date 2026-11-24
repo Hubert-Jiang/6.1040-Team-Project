@@ -15,7 +15,8 @@ const router = createRouter({
     { path: "/login", component: LoginView },
     { path: "/auth/petrock/callback", component: CallbackView },
     // the table page opens from a share link and works without signing in
-    { path: "/t/:token", component: InviteView },
+    { path: "/invite/:token", component: InviteView },
+    { path: "/t/:token", redirect: (to) => ({ path: `/invite/${to.params.token}`, query: to.query }) },
     { path: "/tables/:id", component: TableView, meta: { requiresAuth: true } },
     { path: "/", component: HomeView, meta: { requiresAuth: true } },
     { path: "/:pathMatch(.*)*", redirect: "/" },

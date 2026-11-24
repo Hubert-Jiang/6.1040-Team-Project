@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { openTableUrl } from "../../src/venues/opentable.ts";
 import { authState, client, getStoredSession, logoutCurrentSession, setStoredSession } from "../auth-client.ts";
+import { createLiveRefresher } from "../live-refresh.ts";
 
 interface Table {
   title: string;
@@ -24,7 +25,9 @@ const router = useRouter();
 const tableId = computed(() => String(route.params.id ?? ""));
 const table = ref<Table | null>(null);
 const loaded = ref(false);
+const actionInFlight = ref(false);
 const errorMessage = ref("");
+let loadGeneration = 0;
 
 interface LinkRow {
   link: string;
@@ -35,28 +38,40 @@ interface LinkRow {
 const links = ref<LinkRow[]>([]);
 const newLabel = ref("");
 const copied = ref("");
-const shareUrl = (token: string) => `${window.location.origin}/t/${token}`;
+const shareUrl = (token: string) => `${window.location.origin}/invite/${token}`;
 
 // guests reach a table only through a share link, so the host makes one per group chat and can turn any off
-async function loadLinks() {
-  const listed = await client.api.links.list({ session: getStoredSession() ?? "", gathering: tableId.value });
+async function loadLinks(generation = loadGeneration) {
+  const currentId = tableId.value;
+  const listed = await client.api.links.list({ session: getStoredSession() ?? "", gathering: currentId });
+  if (generation !== loadGeneration || tableId.value !== currentId) return;
   links.value = "error" in listed ? [] : (listed.shared.links as LinkRow[]);
 }
 
 async function addLink() {
-  const result = await client.api.links.create({ session: getStoredSession() ?? "", gathering: tableId.value, label: newLabel.value.trim() || null });
-  if ("error" in result) {
-    errorMessage.value = "Could not make a link.";
-    return;
+  actionInFlight.value = true;
+  try {
+    const result = await client.api.links.create({ session: getStoredSession() ?? "", gathering: tableId.value, label: newLabel.value.trim() || null });
+    if ("error" in result) {
+      errorMessage.value = "Could not make a link.";
+      return;
+    }
+    newLabel.value = "";
+    await loadLinks();
+  } finally {
+    actionInFlight.value = false;
   }
-  newLabel.value = "";
-  await loadLinks();
 }
 
 async function revoke(link: string) {
-  const result = await client.api.links.revoke({ session: getStoredSession() ?? "", link });
-  if ("error" in result) errorMessage.value = "Could not turn off that link.";
-  await loadLinks();
+  actionInFlight.value = true;
+  try {
+    const result = await client.api.links.revoke({ session: getStoredSession() ?? "", link });
+    if ("error" in result) errorMessage.value = "Could not turn off that link.";
+    await loadLinks();
+  } finally {
+    actionInFlight.value = false;
+  }
 }
 
 async function copy(token: string) {
@@ -74,45 +89,89 @@ const bookingUrl = computed(() =>
 );
 
 async function handleUnauthorized() {
+  refresher.stop();
   setStoredSession(null);
   authState.user = null;
   authState.checked = true;
   await router.replace({ path: "/login", query: { redirect: route.fullPath } });
 }
 
-async function load() {
-  const result = await client.gatherings.view({ session: getStoredSession() ?? "", gathering: tableId.value });
+async function load(options: { background?: boolean } = {}) {
+  const currentId = tableId.value;
+  const generation = loadGeneration;
+  const result = await client.gatherings.view({ session: getStoredSession() ?? "", gathering: currentId });
+  if (generation !== loadGeneration || tableId.value !== currentId) return;
   if ("error" in result) {
     if (result.error === "UNAUTHORIZED") {
       await handleUnauthorized();
       return;
     }
-    table.value = null;
+    if (!options.background || result.error === "NOT_FOUND") {
+      table.value = null;
+    }
   } else {
     table.value = result;
   }
   loaded.value = true;
 }
-onMounted(async () => {
+
+const refresher = createLiveRefresher({
+  refresh: () => load({ background: true }),
+  isPaused: () => !table.value || actionInFlight.value,
+});
+
+async function initForTable() {
+  loadGeneration += 1;
+  const generation = loadGeneration;
+  const currentId = tableId.value;
+  table.value = null;
+  loaded.value = false;
+  errorMessage.value = "";
+  links.value = [];
+  copied.value = "";
   await load();
-  if (table.value) await loadLinks();
+  if (generation === loadGeneration && tableId.value === currentId && table.value) {
+    await loadLinks(generation);
+  }
+}
+
+onMounted(async () => {
+  await initForTable();
+  refresher.start();
+});
+
+watch(tableId, async (next, prev) => {
+  if (next === prev || !next) return;
+  refresher.stop();
+  await initForTable();
+  refresher.start();
+});
+
+onUnmounted(() => {
+  refresher.stop();
 });
 
 async function act(action: "confirm" | "book" | "cancel") {
-  const result = await client.gatherings[action]({ session: getStoredSession() ?? "", gathering: tableId.value });
-  if ("error" in result) {
-    if (result.error === "UNAUTHORIZED") {
-      await handleUnauthorized();
-      return;
+  actionInFlight.value = true;
+  try {
+    const result = await client.gatherings[action]({ session: getStoredSession() ?? "", gathering: tableId.value });
+    if ("error" in result) {
+      if (result.error === "UNAUTHORIZED") {
+        await handleUnauthorized();
+        return;
+      }
+      errorMessage.value = "That did not go through. The table may have passed its cutoff or changed since this page loaded.";
+    } else {
+      errorMessage.value = "";
     }
-    errorMessage.value = "That did not go through. The table may have passed its cutoff or changed since this page loaded.";
-  } else {
-    errorMessage.value = "";
+    await load();
+  } finally {
+    actionInFlight.value = false;
   }
-  await load();
 }
 
 async function signOut() {
+  refresher.stop();
   await logoutCurrentSession();
   await router.replace({ path: "/login", query: { redirect: route.fullPath } });
 }
@@ -121,16 +180,21 @@ async function signOut() {
 <template>
   <main class="shell stack">
     <section v-if="table" class="card stack">
-      <strong>{{ table.title }}</strong>
+      <RouterLink to="/" class="muted">← Your tables</RouterLink>
+      <div>
+        <div class="row">
+          <strong class="title">{{ table.title }}</strong>
+          <span class="muted">{{ table.status }}</span>
+        </div>
+        <div class="muted">{{ table.area }}<template v-if="table.confirmedVenue"> · {{ table.confirmedVenue }}</template></div>
+      </div>
       <div class="muted">
-        <div>{{ table.status }}</div>
         <div>Event from {{ shown(table.startTime) }} to {{ shown(table.endTime) }}</div>
         <div>RSVPs close {{ shown(table.cutoffTime) }}</div>
-        <div>{{ table.confirmedVenue ? `${table.confirmedVenue}, ${table.area}` : table.area }}</div>
-        <div v-if="table.details">{{ table.details }}</div>
       </div>
-      <div>
-        {{ table.reservedCount }} of {{ table.capacity }} guest spots taken<span v-if="table.waitlistCount">, {{ table.waitlistCount }} waiting</span><span v-if="table.locked">, locked</span>
+      <p v-if="table.details">{{ table.details }}</p>
+      <div class="seats">
+        <strong>{{ table.reservedCount }} of {{ table.capacity }} guest spots taken</strong><span v-if="table.waitlistCount" class="muted"> · {{ table.waitlistCount }} waiting</span><span v-if="table.locked" class="muted"> · Locked</span>
       </div>
 
       <button v-if="table.status === 'OPEN'" type="button" class="btn btn-primary" @click="act('confirm')">Confirm table</button>
@@ -152,7 +216,7 @@ async function signOut() {
           <div class="row">
             <span>{{ l.label || "Unnamed link" }}<span v-if="!l.active" class="muted"> (turned off)</span></span>
             <span v-if="l.active" class="actions">
-              <RouterLink class="link-btn" :to="`/t/${l.token}`">Open</RouterLink>
+              <RouterLink class="link-btn" :to="`/invite/${l.token}`">Open</RouterLink>
               <button type="button" class="link-btn" @click="copy(l.token)">{{ copied === l.token ? "Copied" : "Copy" }}</button>
               <button type="button" class="link-btn danger" @click="revoke(l.link)">Turn off</button>
             </span>
@@ -165,11 +229,14 @@ async function signOut() {
       </form>
     </section>
     <section v-else-if="loaded" class="card stack">
+      <RouterLink to="/" class="muted">← Your tables</RouterLink>
       <strong>No such table</strong>
       <p class="muted">This table does not exist, or you are not its host. Guests open a table from its share link.</p>
     </section>
 
-    <RouterLink class="btn" to="/">My tables</RouterLink>
-    <button type="button" class="btn" @click="signOut">Sign out</button>
+    <p v-if="authState.user" class="muted small">
+      Signed in as {{ authState.user.email }} ·
+      <button type="button" class="link-btn" @click="signOut">Sign out</button>
+    </p>
   </main>
 </template>
