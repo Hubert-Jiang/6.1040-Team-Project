@@ -4,6 +4,7 @@ import { useRoute, useRouter } from "vue-router";
 import { openTableUrl } from "../../src/venues/opentable.ts";
 import { authState, client, getStoredSession, logoutCurrentSession, setStoredSession } from "../auth-client.ts";
 import { createLiveRefresher } from "../live-refresh.ts";
+import TableRoster, { type TableRosterData } from "./TableRoster.vue";
 
 interface Table {
   title: string;
@@ -27,7 +28,13 @@ const table = ref<Table | null>(null);
 const loaded = ref(false);
 const actionInFlight = ref(false);
 const errorMessage = ref("");
+const roster = ref<TableRosterData | null>(null);
+const rosterLoading = ref(false);
+const rosterError = ref("");
 let loadGeneration = 0;
+
+const isActiveTable = (status: string) => status === "OPEN" || status === "CONFIRMED" || status === "BOOKED";
+const profileReturnTo = computed(() => `/profile?returnTo=${encodeURIComponent(route.fullPath)}`);
 
 interface LinkRow {
   link: string;
@@ -68,15 +75,30 @@ async function loadLinks(generation = loadGeneration) {
 
 async function addLink() {
   if (actionInFlight.value) return;
+  const trimmedLabel = newLabel.value.trim();
+  if (trimmedLabel.length > 80) {
+    errorMessage.value = "Link name must be 80 characters or fewer.";
+    return;
+  }
   actionInFlight.value = true;
   try {
-    const result = await client.api.links.create({ session: getStoredSession() ?? "", gathering: tableId.value, label: newLabel.value.trim() || null });
+    const result = await client.api.links.create({
+      session: getStoredSession() ?? "",
+      gathering: tableId.value,
+      label: trimmedLabel || null,
+    });
     if ("error" in result) {
       if (result.error === "UNAUTHORIZED") {
         await handleUnauthorized();
         return;
       }
-      errorMessage.value = "Could not make a link.";
+      if (result.error === "INVALID_REQUEST") {
+        errorMessage.value = "Link name must be 80 characters or fewer.";
+      } else if (result.error === "NOT_FOUND") {
+        errorMessage.value = "Could not find this table to make a link.";
+      } else {
+        errorMessage.value = "Could not reach the server to make a link. Please try again.";
+      }
       return;
     }
     errorMessage.value = "";
@@ -168,8 +190,52 @@ async function load(options: { background?: boolean } = {}) {
   loaded.value = true;
 }
 
+async function loadRoster(options: { background?: boolean } = {}) {
+  if (!table.value || !isActiveTable(table.value.status)) {
+    roster.value = null;
+    rosterLoading.value = false;
+    rosterError.value = "";
+    return;
+  }
+  const currentId = tableId.value;
+  const generation = loadGeneration;
+  if (!options.background && !roster.value) {
+    rosterLoading.value = true;
+  }
+  const result = await client.api.tables.profiles({ session: getStoredSession() ?? "", gathering: currentId });
+  if (generation !== loadGeneration || tableId.value !== currentId) return;
+  rosterLoading.value = false;
+  if ("error" in result) {
+    if (result.error === "UNAUTHORIZED") {
+      await handleUnauthorized();
+      return;
+    }
+    if (result.error === "CONFLICT" || result.error === "FORBIDDEN" || result.error === "NOT_FOUND") {
+      roster.value = null;
+      rosterError.value = "";
+      return;
+    }
+    if (!options.background || !roster.value) {
+      rosterError.value = "Could not load tablemates right now.";
+    }
+    return;
+  }
+  rosterError.value = "";
+  roster.value = { host: result.host, seated: result.seated };
+}
+
+async function refreshLive() {
+  await load({ background: true });
+  if (table.value && isActiveTable(table.value.status)) {
+    await loadRoster({ background: true });
+  } else {
+    roster.value = null;
+    rosterError.value = "";
+  }
+}
+
 const refresher = createLiveRefresher({
-  refresh: () => load({ background: true }),
+  refresh: refreshLive,
   isPaused: () => !table.value || actionInFlight.value,
 });
 
@@ -181,10 +247,13 @@ async function initForTable() {
   loaded.value = false;
   errorMessage.value = "";
   links.value = [];
+  roster.value = null;
+  rosterLoading.value = false;
+  rosterError.value = "";
   clearCopied();
   await load();
   if (generation === loadGeneration && tableId.value === currentId && table.value) {
-    await loadLinks(generation);
+    await Promise.all([loadLinks(generation), loadRoster()]);
   }
 }
 
@@ -219,6 +288,12 @@ async function act(action: "confirm" | "book" | "cancel") {
       errorMessage.value = "";
     }
     await load();
+    if (table.value && isActiveTable(table.value.status)) {
+      await loadRoster({ background: true });
+    } else {
+      roster.value = null;
+      rosterError.value = "";
+    }
   } finally {
     actionInFlight.value = false;
   }
@@ -262,6 +337,14 @@ async function signOut() {
       <p v-if="errorMessage" class="error" role="alert">{{ errorMessage }}</p>
     </section>
 
+    <TableRoster
+      v-if="table && isActiveTable(table.status)"
+      :roster="roster"
+      :loading="rosterLoading"
+      :error="rosterError"
+      :edit-profile-to="profileReturnTo"
+    />
+
     <section v-if="table" class="card stack">
       <strong>Share links</strong>
       <p v-if="links.length === 0" class="muted">Guests join through a link. Make one for each group chat you post in.</p>
@@ -304,7 +387,7 @@ async function signOut() {
         </li>
       </ul>
       <form class="row" @submit.prevent="addLink">
-        <input v-model="newLabel" class="input" placeholder="Link name, e.g. Dorm group chat" />
+        <input v-model="newLabel" class="input" maxlength="80" placeholder="Link name, e.g. Dorm group chat" />
         <button type="submit" class="btn btn-small">Make link</button>
       </form>
     </section>
@@ -316,6 +399,7 @@ async function signOut() {
 
     <p v-if="authState.user" class="muted small">
       Signed in as {{ authState.user.email }} ·
+      <RouterLink :to="profileReturnTo" class="link-btn">Dining profile</RouterLink> ·
       <button type="button" class="link-btn" @click="signOut">Sign out</button>
     </p>
   </main>

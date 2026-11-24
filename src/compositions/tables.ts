@@ -57,6 +57,7 @@ const CreateTable = endpoint(
     end,
     cutoff,
     capacityOk,
+    labelOk,
     scoped,
     matches,
     gathering,
@@ -94,14 +95,24 @@ const CreateTable = endpoint(
     return receive({ session, title, area, startTime, endTime, cutoffTime, details, scope, confirmedVenue, capacity, linkLabel })
       .then(where(compute(computations.now, {}, now)).then(Sessioning.current({ session, now }).responds({ subject: host })))
       .then(
-        // capacity is checked before Hosting.create, so a bad capacity never leaves a table without a pool
+        // capacity and linkLabel are checked before Hosting.create, so neither refusal leaves partial state
         where(compute(computations.isValidCapacity, { capacity }, capacityOk), is.among(capacityOk, [false]))
           .then(respond({ error: "INVALID_CAPACITY" }))
           .named("invalid-capacity"),
+        where(
+          compute(computations.isValidCapacity, { capacity }, capacityOk),
+          is.among(capacityOk, [true]),
+          compute(computations.isValidLabel, { label: linkLabel }, labelOk),
+          is.among(labelOk, [false]),
+        )
+          .then(respond({ error: "INVALID_LABEL" }))
+          .named("invalid-label"),
         createAndShare(
           where(
             compute(computations.isValidCapacity, { capacity }, capacityOk),
             is.among(capacityOk, [true]),
+            compute(computations.isValidLabel, { label: linkLabel }, labelOk),
+            is.among(labelOk, [true]),
             compute(computations.hasText, { value: scope }, scoped),
             is.among(scoped, [false]),
             ...parseTimes,
@@ -111,6 +122,8 @@ const CreateTable = endpoint(
           where(
             compute(computations.isValidCapacity, { capacity }, capacityOk),
             is.among(capacityOk, [true]),
+            compute(computations.isValidLabel, { label: linkLabel }, labelOk),
+            is.among(labelOk, [true]),
             compute(computations.hasText, { value: scope }, scoped),
             is.among(scoped, [true]),
             Authenticating._hasDomain({ user: host, domain: scope }).is({ matches }),
@@ -121,6 +134,8 @@ const CreateTable = endpoint(
         where(
           compute(computations.isValidCapacity, { capacity }, capacityOk),
           is.among(capacityOk, [true]),
+          compute(computations.isValidLabel, { label: linkLabel }, labelOk),
+          is.among(labelOk, [true]),
           compute(computations.hasText, { value: scope }, scoped),
           is.among(scoped, [true]),
           Authenticating._hasDomain({ user: host, domain: scope }).is({ matches }),

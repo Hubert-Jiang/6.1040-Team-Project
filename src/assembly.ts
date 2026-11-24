@@ -4,6 +4,7 @@ import type { PetrockClient } from "./auth/petrock.ts";
 import { authComposition } from "./compositions/auth.ts";
 import { tablesComposition } from "./compositions/tables.ts";
 import { gatheringsComposition } from "./compositions/gatherings.ts";
+import { profilesComposition } from "./compositions/profiles.ts";
 import { applicationConceptSet } from "./concepts.ts";
 
 // Allows static artifact generation (`sync-engine artifacts pin`) without opening a live Mongo connection.
@@ -16,6 +17,11 @@ export function assembleApplication({
   return assemble({
     conceptSet: applicationConceptSet,
     instances: applicationConceptSet.implementations("mongo", { database, petrock }),
-    composition: { Auth: authComposition, Gatherings: gatheringsComposition, Tables: tablesComposition },
+    composition: {
+      Auth: authComposition,
+      Gatherings: gatheringsComposition,
+      Tables: tablesComposition,
+      Profiles: profilesComposition,
+    },
   });
 }

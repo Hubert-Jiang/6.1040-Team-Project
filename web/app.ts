@@ -7,6 +7,7 @@ import CallbackView from "./components/CallbackView.vue";
 import HomeView from "./components/HomeView.vue";
 import LoginView from "./components/LoginView.vue";
 import InviteView from "./components/InviteView.vue";
+import ProfileView from "./components/ProfileView.vue";
 import TableView from "./components/TableView.vue";
 
 const router = createRouter({
@@ -17,6 +18,7 @@ const router = createRouter({
     // the table page opens from a share link and works without signing in
     { path: "/invite/:token", component: InviteView },
     { path: "/t/:token", redirect: (to) => ({ path: `/invite/${to.params.token}`, query: to.query }) },
+    { path: "/profile", component: ProfileView, meta: { requiresAuth: true } },
     { path: "/tables/:id", component: TableView, meta: { requiresAuth: true } },
     { path: "/", component: HomeView, meta: { requiresAuth: true } },
     { path: "/:pathMatch(.*)*", redirect: "/" },

@@ -1,5 +1,5 @@
 import { beforeEach, expect, test } from "bun:test";
-import { InvalidExpiry, LinkingConcept, NotCreator } from "../src/concepts/Linking.ts";
+import { InvalidExpiry, InvalidLabel, LinkingConcept, NotCreator } from "../src/concepts/Linking.ts";
 import { testDatabase } from "./support/mongo.ts";
 
 // a fixed clock: `at(h)` is h hours after noon on Dec 1
@@ -123,4 +123,23 @@ test("activating an expired link restores active state without resolving past it
   expect(await links._listForTarget({ target: "dinner" })).toEqual([
     { link, token, label: undefined, active: true, expiresAt: at(2) },
   ]);
+});
+
+test("createLink enforces trimmed label up to 80 characters after expiry check", async () => {
+  const exact = await links.createLink({ target: "dinner", creator: "noah", label: "l".repeat(80), now: at(0) });
+  const padded = await links.createLink({ target: "dinner", creator: "noah", label: `  ${"p".repeat(80)}  `, now: at(1) });
+
+  expect(await links._listForTarget({ target: "dinner" })).toEqual([
+    { link: exact.link, token: exact.token, label: "l".repeat(80), active: true, expiresAt: undefined },
+    { link: padded.link, token: padded.token, label: "p".repeat(80), active: true, expiresAt: undefined },
+  ]);
+
+  await expect(links.createLink({ target: "dinner", creator: "noah", label: "x".repeat(81), now: at(2) })).rejects.toBeInstanceOf(
+    InvalidLabel,
+  );
+  // InvalidExpiry still takes precedence over InvalidLabel
+  await expect(
+    links.createLink({ target: "dinner", creator: "noah", label: "x".repeat(81), expiresAt: at(2), now: at(2) }),
+  ).rejects.toBeInstanceOf(InvalidExpiry);
+  expect(await links._listForTarget({ target: "dinner" })).toHaveLength(2);
 });

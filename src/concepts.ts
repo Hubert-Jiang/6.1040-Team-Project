@@ -4,6 +4,7 @@ import authenticatingSpec from "@design/concepts/Authenticating.md" with { type:
 import hostingSpec from "@design/concepts/Hosting.md" with { type: "text" };
 import invitingSpec from "@design/concepts/Inviting.md" with { type: "text" };
 import linkingSpec from "@design/concepts/Linking.md" with { type: "text" };
+import profilingSpec from "@design/concepts/Profiling.md" with { type: "text" };
 import reservingSpec from "@design/concepts/Reserving.md" with { type: "text" };
 import sessioningSpec from "@design/concepts/Sessioning.md" with { type: "text" };
 import { buildPetrockAuthorizationUrl, type PetrockClient } from "./auth/petrock.ts";
@@ -26,7 +27,8 @@ import {
   NotHost,
 } from "./concepts/Hosting.ts";
 import { AlreadyAccepted, InvalidPendingKey, InvitingConcept, NotAccepted } from "./concepts/Inviting.ts";
-import { InvalidExpiry, LinkingConcept, NotCreator } from "./concepts/Linking.ts";
+import { InvalidExpiry, InvalidLabel, LinkingConcept, NotCreator } from "./concepts/Linking.ts";
+import { InvalidDistance, InvalidProfile, ProfilingConcept } from "./concepts/Profiling.ts";
 import {
   AlreadyInPool,
   AlreadyReserved,
@@ -131,6 +133,7 @@ const linking = registerConcept({
   spec: linkingSpec,
   refusals: {
     INVALID_EXPIRY: InvalidExpiry,
+    INVALID_LABEL: InvalidLabel,
     NOT_CREATOR: NotCreator,
   },
   floors: { mongo: ({ database }: MongoFloorContext, name: string) => new LinkingConcept(database, name) },
@@ -147,6 +150,16 @@ const inviting = registerConcept({
   floors: { mongo: ({ database }: MongoFloorContext, name: string) => new InvitingConcept(database, name) },
 });
 
+const profiling = registerConcept({
+  class: ProfilingConcept,
+  spec: profilingSpec,
+  refusals: {
+    INVALID_DISTANCE: InvalidDistance,
+    INVALID_PROFILE: InvalidProfile,
+  },
+  floors: { mongo: ({ database }: MongoFloorContext, name: string) => new ProfilingConcept(database, name) },
+});
+
 // each concept is registered above and listed here once
 export const applicationConceptSet = conceptSet(
   {
@@ -156,6 +169,7 @@ export const applicationConceptSet = conceptSet(
     Reserving: reserving,
     Linking: linking,
     Inviting: inviting,
+    Profiling: profiling,
   },
   {
     now: (_input: Record<string, never>) => new Date(),
@@ -174,8 +188,27 @@ export const applicationConceptSet = conceptSet(
     hasText: ({ value }: { value?: string | null }) => typeof value === "string" && value.trim().length > 0,
     isValidCapacity: ({ capacity }: { capacity?: number | null }) =>
       typeof capacity === "number" && Number.isInteger(capacity) && capacity >= 1 && capacity <= MAX_CAPACITY,
+    isValidLabel: ({ label }: { label?: string | null }) =>
+      label == null || (typeof label === "string" && label.trim().length <= 80),
     isAcceptingGuests: ({ status, locked, cutoffTime, now }: { status: string; locked: boolean; cutoffTime: Date; now: Date }) =>
       (status === "OPEN" || status === "CONFIRMED") && !locked && now.getTime() <= new Date(cutoffTime).getTime(),
+    resolveDisplayName: ({
+      preferredName,
+      accountName,
+      email,
+    }: {
+      preferredName?: string | null;
+      accountName?: string | null;
+      email: string;
+    }) => {
+      const preferred = typeof preferredName === "string" ? preferredName.trim() : "";
+      if (preferred.length > 0) return preferred;
+      const account = typeof accountName === "string" ? accountName.trim() : "";
+      if (account.length > 0) return account;
+      return email;
+    },
+    isActiveTableStatus: ({ status }: { status: string }) =>
+      status === "OPEN" || status === "CONFIRMED" || status === "BOOKED",
   },
 );
 

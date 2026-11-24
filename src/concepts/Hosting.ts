@@ -29,6 +29,9 @@ interface GatheringDoc {
 // a host can have this many gatherings that are OPEN or CONFIRMED at once
 const ACTIVE_LIMIT = 3;
 
+const MAX_SHORT_FIELD_LENGTH = 100;
+const MAX_DETAILS_LENGTH = 300;
+
 // leaving OPEN or CONFIRMED gives the host's slot back in the same update as the status change
 const freeSlot = { $unset: { slot: "" } } as const;
 
@@ -59,7 +62,7 @@ export class HostingConcept {
   }
 
   /**
-   * Returns the new OPEN gathering. Raises InvalidDetails for an empty title or area, InvalidSchedule unless
+   * Returns the new OPEN gathering. Raises InvalidDetails for empty or oversized text fields, InvalidSchedule unless
    * now < cutoffTime <= startTime < endTime, and HostLimitReached when the host already has 3 active gatherings.
    */
   async create(input: {
@@ -77,7 +80,22 @@ export class HostingConcept {
     const { host, startTime, endTime, cutoffTime, now } = input;
     const title = input.title.trim();
     const area = input.area.trim();
-    if (!title || !area) throw new InvalidDetails("A gathering needs a title and an area.");
+    const details = input.details?.trim();
+    const scope = input.scope?.trim();
+    const confirmedVenue = input.confirmedVenue?.trim();
+    if (
+      !title ||
+      !area ||
+      title.length > MAX_SHORT_FIELD_LENGTH ||
+      area.length > MAX_SHORT_FIELD_LENGTH ||
+      (scope !== undefined && scope.length > MAX_SHORT_FIELD_LENGTH) ||
+      (confirmedVenue !== undefined && confirmedVenue.length > MAX_SHORT_FIELD_LENGTH) ||
+      (details !== undefined && details.length > MAX_DETAILS_LENGTH)
+    ) {
+      throw new InvalidDetails(
+        "Gathering title and area must be non-empty, title, area, scope, and confirmedVenue must be at most 100 characters, and details must be at most 300 characters.",
+      );
+    }
     // written so that an invalid date (NaN) fails every comparison and is refused too
     if (!(now < cutoffTime && cutoffTime <= startTime && startTime < endTime)) {
       throw new InvalidSchedule("Gathering requires valid future cutoff, start, and end times.");
@@ -85,9 +103,9 @@ export class HostingConcept {
 
     // empty optional fields are left off the document, so they read back as absent
     const gathering: GatheringDoc = { _id: crypto.randomUUID(), host, title, status: "OPEN", startTime, endTime, cutoffTime, area };
-    if (input.details?.trim()) gathering.details = input.details.trim();
-    if (input.scope?.trim()) gathering.scope = input.scope.trim();
-    if (input.confirmedVenue?.trim()) gathering.confirmedVenue = input.confirmedVenue.trim();
+    if (details) gathering.details = details;
+    if (scope) gathering.scope = scope;
+    if (confirmedVenue) gathering.confirmedVenue = confirmedVenue;
 
     // takes the first free slot; all of them taken means the host is at the limit
     await this.#ready();
@@ -109,10 +127,13 @@ export class HostingConcept {
     throw new CannotConfirm("This gathering can no longer be confirmed.");
   }
 
-  /** Sets the venue of an OPEN or CONFIRMED gathering. The spec has no refusal here, so anything else is a plain error. */
+  /** Sets the venue of an OPEN or CONFIRMED gathering. Raises InvalidDetails when empty or over 100 characters. */
   async setVenue({ gathering, confirmedVenue }: { gathering: string; confirmedVenue: string }) {
     const venue = confirmedVenue.trim();
-    if (venue && (await this.#move({ _id: gathering, status: { $in: ["OPEN", "CONFIRMED"] } }, { $set: { confirmedVenue: venue } }))) return {};
+    if (!venue || venue.length > MAX_SHORT_FIELD_LENGTH) {
+      throw new InvalidDetails("Confirmed venue must be non-empty and at most 100 characters.");
+    }
+    if (await this.#move({ _id: gathering, status: { $in: ["OPEN", "CONFIRMED"] } }, { $set: { confirmedVenue: venue } })) return {};
     throw new Error(`cannot set the venue of gathering ${gathering}`);
   }
 

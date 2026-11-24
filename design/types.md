@@ -18,4 +18,6 @@ instantiate Linking with
 instantiate Inviting with
   Event is Hosting.Gathering
   Guest is Authenticating.User
+instantiate Profiling with
+  User is Authenticating.User
 ```

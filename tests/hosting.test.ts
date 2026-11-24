@@ -154,3 +154,58 @@ test("ended gatherings are the confirmed and booked ones past their end, earlies
   expect(await h._getEnded({ now: at(9) })).toEqual([{ gathering: confirmed }]);
   expect(await status(open)).toBe("OPEN");
 });
+
+test("create enforces trimmed field length bounds before schedule and host limit checks", async () => {
+  const { gathering } = await h.create({
+    ...dinner,
+    title: `  ${"t".repeat(100)}  `,
+    area: `  ${"a".repeat(100)}  `,
+    scope: `  ${"s".repeat(100)}  `,
+    confirmedVenue: `  ${"v".repeat(100)}  `,
+    details: `  ${"d".repeat(300)}  `,
+  });
+  expect(await h._getDetails({ gathering })).toEqual([
+    {
+      host: "noah",
+      title: "t".repeat(100),
+      status: "OPEN",
+      startTime: at(6),
+      endTime: at(8),
+      cutoffTime: at(4),
+      details: "d".repeat(300),
+      scope: "s".repeat(100),
+      area: "a".repeat(100),
+      confirmedVenue: "v".repeat(100),
+    },
+  ]);
+
+  // over-limit fields refuse InvalidDetails with no DB mutations
+  await expect(h.create({ ...dinner, title: "t".repeat(101) })).rejects.toBeInstanceOf(InvalidDetails);
+  await expect(h.create({ ...dinner, area: "a".repeat(101) })).rejects.toBeInstanceOf(InvalidDetails);
+  await expect(h.create({ ...dinner, scope: "s".repeat(101) })).rejects.toBeInstanceOf(InvalidDetails);
+  await expect(h.create({ ...dinner, confirmedVenue: "v".repeat(101) })).rejects.toBeInstanceOf(InvalidDetails);
+  await expect(h.create({ ...dinner, details: "d".repeat(301) })).rejects.toBeInstanceOf(InvalidDetails);
+  expect(await h._getHosted({ host: "noah" })).toHaveLength(1);
+
+  // InvalidDetails takes precedence over InvalidSchedule
+  await expect(h.create({ ...dinner, title: "t".repeat(101), now: at(5) })).rejects.toBeInstanceOf(InvalidDetails);
+
+  // InvalidDetails takes precedence over HostLimitReached
+  await h.create(dinner);
+  await h.create(dinner);
+  await expect(h.create(dinner)).rejects.toBeInstanceOf(HostLimitReached);
+  await expect(h.create({ ...dinner, details: "d".repeat(301) })).rejects.toBeInstanceOf(InvalidDetails);
+  expect(await h._getHosted({ host: "noah" })).toHaveLength(3);
+});
+
+test("setVenue enforces non-empty trimmed length up to 100 characters", async () => {
+  const { gathering } = await h.create({ ...dinner, confirmedVenue: "Oleana" });
+
+  await expect(h.setVenue({ gathering, confirmedVenue: "" })).rejects.toBeInstanceOf(InvalidDetails);
+  await expect(h.setVenue({ gathering, confirmedVenue: "   " })).rejects.toBeInstanceOf(InvalidDetails);
+  await expect(h.setVenue({ gathering, confirmedVenue: "v".repeat(101) })).rejects.toBeInstanceOf(InvalidDetails);
+  expect((await h._getDetails({ gathering }))[0]?.confirmedVenue).toBe("Oleana");
+
+  await expect(h.setVenue({ gathering, confirmedVenue: `  ${"v".repeat(100)}  ` })).resolves.toEqual({});
+  expect((await h._getDetails({ gathering }))[0]?.confirmedVenue).toBe("v".repeat(100));
+});

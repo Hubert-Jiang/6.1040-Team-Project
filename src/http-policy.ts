@@ -25,6 +25,7 @@ export const appHttpPolicy = httpPolicy({
     // viewing and sharing links
     LINK_NOT_FOUND: "NOT_FOUND",
     INVALID_EXPIRY: "INVALID_REQUEST",
+    INVALID_LABEL: "INVALID_REQUEST",
     NOT_CREATOR: "FORBIDDEN",
     // accepting and withdrawing
     OWN_TABLE: "CONFLICT",
@@ -34,5 +35,10 @@ export const appHttpPolicy = httpPolicy({
     ALREADY_IN_POOL: "CONFLICT",
     POOL_CLOSED: "CONFLICT",
     CANNOT_CANCEL: "CONFLICT",
+    // profiles and table rosters
+    INVALID_DISTANCE: "INVALID_REQUEST",
+    INVALID_PROFILE: "INVALID_REQUEST",
+    TABLE_INACTIVE: "CONFLICT",
+    NOT_PARTICIPANT: "FORBIDDEN",
   },
 });
