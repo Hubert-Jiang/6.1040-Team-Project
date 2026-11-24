@@ -4,6 +4,7 @@ import type { PetrockClient } from "./auth/petrock.ts";
 import { authComposition } from "./compositions/auth.ts";
 import { tablesComposition } from "./compositions/tables.ts";
 import { gatheringsComposition } from "./compositions/gatherings.ts";
+import { pollsComposition } from "./compositions/polls.ts";
 import { profilesComposition } from "./compositions/profiles.ts";
 import { applicationConceptSet } from "./concepts.ts";
 
@@ -22,6 +23,7 @@ export function assembleApplication({
       Gatherings: gatheringsComposition,
       Tables: tablesComposition,
       Profiles: profilesComposition,
+      Polls: pollsComposition,
     },
   });
 }

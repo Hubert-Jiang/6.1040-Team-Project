@@ -70,9 +70,12 @@ setVenue(gathering: Gathering, confirmedVenue: String) : returns ()
   where trimmed confirmedVenue is empty or trimmed confirmedVenue exceeds 100 characters
   then
     refuses INVALID_DETAILS "Confirmed venue must be non-empty and at most 100 characters."
+  where trimmed confirmedVenue is non-empty and trimmed confirmedVenue is at most 100 characters and (gathering is not in Gatherings or (gathering's status is not OPEN and gathering's status is not CONFIRMED))
+  then
+    refuses CANNOT_SET_VENUE "Venue can only be set on an open or confirmed gathering."
   where gathering is in Gatherings and (gathering's status is OPEN or gathering's status is CONFIRMED) and trimmed confirmedVenue is non-empty and trimmed confirmedVenue is at most 100 characters
   then
-    set gathering's confirmedVenue to confirmedVenue
+    set gathering's confirmedVenue to trimmed confirmedVenue
     returns
 
 markBooked(gathering: Gathering, host: Host) : returns ()

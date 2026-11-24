@@ -3,6 +3,12 @@ import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { authState, client, getStoredSession, logoutCurrentSession, refreshAuth, setStoredSession } from "../auth-client.ts";
 import { createLiveRefresher } from "../live-refresh.ts";
+import TablePoll, {
+  checkAddPollOption,
+  resolvePollActionError,
+  type PollActionKind,
+  type TablePollData,
+} from "./TablePoll.vue";
 import TableRoster, { type TableRosterData } from "./TableRoster.vue";
 
 interface TableDetails {
@@ -38,6 +44,10 @@ const errorMessage = ref("");
 const roster = ref<TableRosterData | null>(null);
 const rosterLoading = ref(false);
 const rosterError = ref("");
+const poll = ref<TablePollData | null>(null);
+const pollLoading = ref(false);
+const pollBusy = ref(false);
+const pollError = ref("");
 let loadGeneration = 0;
 
 const session = () => getStoredSession() ?? "";
@@ -75,6 +85,23 @@ function clearRoster() {
   rosterError.value = "";
 }
 
+function clearPoll() {
+  poll.value = null;
+  pollLoading.value = false;
+  pollError.value = "";
+}
+
+function clearSignedInState() {
+  setStoredSession(null);
+  authState.user = null;
+  authState.checked = true;
+  hosting.value = false;
+  hostAcceptAttempted.value = false;
+  place.value = null;
+  clearRoster();
+  clearPoll();
+}
+
 async function loadMine(generation = loadGeneration) {
   if (!table.value || !signedIn.value) return;
   const currentToken = token.value;
@@ -82,13 +109,7 @@ async function loadMine(generation = loadGeneration) {
   if (generation !== loadGeneration || token.value !== currentToken) return;
   if ("error" in mine) {
     if (mine.error === "UNAUTHORIZED") {
-      setStoredSession(null);
-      authState.user = null;
-      authState.checked = true;
-      hosting.value = false;
-      hostAcceptAttempted.value = false;
-      place.value = null;
-      clearRoster();
+      clearSignedInState();
     }
     return;
   }
@@ -99,6 +120,7 @@ async function loadMine(generation = loadGeneration) {
   place.value = { reservation: mine.place.reservation ?? null, position: mine.place.position ?? null };
   if (!canViewRoster.value) {
     clearRoster();
+    clearPoll();
   }
 }
 
@@ -121,13 +143,7 @@ async function loadRoster(generation = loadGeneration, options: { background?: b
   }
   if ("error" in result) {
     if (result.error === "UNAUTHORIZED") {
-      setStoredSession(null);
-      authState.user = null;
-      authState.checked = true;
-      hosting.value = false;
-      hostAcceptAttempted.value = false;
-      place.value = null;
-      clearRoster();
+      clearSignedInState();
       return;
     }
     if (result.error === "CONFLICT" || result.error === "FORBIDDEN" || result.error === "NOT_FOUND") {
@@ -143,32 +159,155 @@ async function loadRoster(generation = loadGeneration, options: { background?: b
   roster.value = { host: result.host, seated: result.seated };
 }
 
+async function loadPoll(generation = loadGeneration, options: { background?: boolean } = {}) {
+  if (!canViewRoster.value || !table.value) {
+    clearPoll();
+    return;
+  }
+  const currentToken = token.value;
+  const gathering = table.value.gathering;
+  if (!options.background && !poll.value) {
+    pollLoading.value = true;
+  }
+  const result = await client.api.tables.poll({ session: session(), gathering });
+  if (generation !== loadGeneration || token.value !== currentToken) return;
+  pollLoading.value = false;
+  if (!canViewRoster.value) {
+    clearPoll();
+    return;
+  }
+  if ("error" in result) {
+    if (result.error === "UNAUTHORIZED") {
+      clearSignedInState();
+      return;
+    }
+    if (result.error === "CONFLICT" || result.error === "FORBIDDEN" || result.error === "NOT_FOUND") {
+      clearPoll();
+      return;
+    }
+    if (!options.background || !poll.value) {
+      pollError.value = "Could not load location poll right now.";
+    }
+    return;
+  }
+  pollError.value = "";
+  poll.value = {
+    open: result.open,
+    confirmedVenue: result.confirmedVenue ?? null,
+    hosting: result.hosting,
+    votedOption: result.votedOption ?? null,
+    options: result.options,
+  };
+}
+
+async function runPollAction(
+  action: PollActionKind,
+  request: (gathering: string) => Promise<{ error: string } | object>,
+  options: { attemptedLabel?: string; reloadTable?: boolean } = {},
+) {
+  if (pollBusy.value || !table.value) return;
+  const currentToken = token.value;
+  const gathering = table.value.gathering;
+  const generation = loadGeneration;
+  pollBusy.value = true;
+  pollError.value = "";
+  try {
+    const result = await request(gathering);
+    if (generation !== loadGeneration || token.value !== currentToken) return;
+    if ("error" in result) {
+      if (result.error === "UNAUTHORIZED") {
+        clearSignedInState();
+        return;
+      }
+      if (result.error === "CONFLICT" || result.error === "NOT_FOUND" || result.error === "FORBIDDEN") {
+        await loadTable({ background: true });
+        if (generation !== loadGeneration || token.value !== currentToken) return;
+        await loadMine(generation);
+        if (generation !== loadGeneration || token.value !== currentToken) return;
+        await loadPoll(generation, { background: true });
+        if (generation !== loadGeneration || token.value !== currentToken) return;
+      }
+      pollError.value = resolvePollActionError(action, result.error, {
+        poll: poll.value,
+        tableActive: table.value ? isActiveTable(table.value.status) : false,
+        attemptedLabel: options.attemptedLabel,
+      });
+      return;
+    }
+    if (options.reloadTable) {
+      await loadTable({ background: true });
+      if (generation !== loadGeneration || token.value !== currentToken) return;
+    }
+    await loadPoll(generation, { background: true });
+  } finally {
+    if (generation === loadGeneration && token.value === currentToken) {
+      pollBusy.value = false;
+    }
+  }
+}
+
+async function addPollOption(rawLabel: string) {
+  const check = checkAddPollOption(poll.value, rawLabel);
+  if (check.error) {
+    pollError.value = check.error;
+    return;
+  }
+  await runPollAction(
+    "add",
+    (gathering) => client.api.tables.poll.add({ session: session(), gathering, label: check.trimmed }),
+    { attemptedLabel: check.trimmed },
+  );
+}
+
+async function votePollOption(option: string) {
+  await runPollAction("vote", (gathering) => client.api.tables.poll.vote({ session: session(), gathering, option }));
+}
+
+async function unvotePollOption() {
+  await runPollAction("unvote", (gathering) => client.api.tables.poll.unvote({ session: session(), gathering }));
+}
+
+async function removePollOption(option: string) {
+  await runPollAction("remove", (gathering) => client.api.tables.poll.remove({ session: session(), gathering, option }));
+}
+
+async function choosePollVenue(option: string) {
+  await runPollAction(
+    "chooseVenue",
+    (gathering) => client.api.tables.poll["choose-venue"]({ session: session(), gathering, option }),
+    { reloadTable: true },
+  );
+}
+
 async function refreshLive() {
-  if (busy.value || notFound.value || !table.value) return;
+  if (busy.value || pollBusy.value || notFound.value || !table.value) return;
   const generation = loadGeneration;
   const ok = await loadTable({ background: true });
-  if (!ok || generation !== loadGeneration || busy.value || notFound.value || !table.value) {
+  if (!ok || generation !== loadGeneration || busy.value || pollBusy.value || notFound.value || !table.value) {
     if (!table.value || !isActiveTable(table.value?.status ?? "")) {
       clearRoster();
+      clearPoll();
     }
     return;
   }
   if (signedIn.value) {
     await loadMine(generation);
-    if (generation !== loadGeneration || busy.value) return;
+    if (generation !== loadGeneration || busy.value || pollBusy.value) return;
     if (canViewRoster.value) {
-      await loadRoster(generation, { background: true });
+      await Promise.all([loadRoster(generation, { background: true }), loadPoll(generation, { background: true })]);
     } else {
       clearRoster();
+      clearPoll();
     }
   } else {
     clearRoster();
+    clearPoll();
   }
 }
 
 const refresher = createLiveRefresher({
   refresh: refreshLive,
-  isPaused: () => busy.value || notFound.value || !table.value,
+  isPaused: () => busy.value || pollBusy.value || notFound.value || !table.value,
 });
 
 
@@ -204,7 +343,7 @@ async function accept() {
     }
     await Promise.all([loadTable(), loadMine()]);
     if (canViewRoster.value) {
-      await loadRoster(loadGeneration);
+      await Promise.all([loadRoster(loadGeneration), loadPoll(loadGeneration)]);
     }
   } finally {
     busy.value = false;
@@ -223,6 +362,7 @@ async function withdraw() {
       return;
     }
     clearRoster();
+    clearPoll();
     message.value = "You withdrew. You can accept again while the table is open.";
     await Promise.all([loadTable(), loadMine()]);
   } finally {
@@ -235,6 +375,7 @@ async function withdraw() {
 
 async function signOut() {
   clearRoster();
+  clearPoll();
   await logoutCurrentSession();
   hosting.value = false;
   hostAcceptAttempted.value = false;
@@ -253,6 +394,8 @@ function resetForToken() {
   message.value = "";
   errorMessage.value = "";
   clearRoster();
+  clearPoll();
+  pollBusy.value = false;
 }
 
 async function initForToken() {
@@ -264,7 +407,7 @@ async function initForToken() {
   await loadMine(generation);
   if (generation !== loadGeneration) return;
   if (canViewRoster.value) {
-    await loadRoster(generation);
+    await Promise.all([loadRoster(generation), loadPoll(generation)]);
   }
   if (generation !== loadGeneration) return;
   if (route.query.accept === "1") {
@@ -353,6 +496,19 @@ onUnmounted(() => {
 
       <p v-else class="muted">Loading…</p>
     </section>
+
+    <TablePoll
+      v-if="canViewRoster"
+      :poll="poll"
+      :loading="pollLoading"
+      :busy="pollBusy"
+      :error="pollError"
+      @add="addPollOption"
+      @vote="votePollOption"
+      @unvote="unvotePollOption"
+      @remove="removePollOption"
+      @choose-venue="choosePollVenue"
+    />
 
     <TableRoster
       v-if="canViewRoster"

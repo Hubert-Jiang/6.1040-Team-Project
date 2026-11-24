@@ -196,6 +196,92 @@ export type AppWire = {
     };
     error: { error: AppWideError | "INVALID_INPUT" | "UNKNOWN_SESSION" };
   };
+  "/api/tables/poll": {
+    input: {
+      "gathering": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>[0], ["gathering"]>>;
+      "session": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>[0], ["session"]>>;
+    };
+    output: {
+      "confirmedVenue": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.computations)["isPollOpen"]["fn"]>[0], ["confirmedVenue"]>, AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>>>, ["confirmedVenue"]>]>> | null;
+      "hosting": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["matchesUser"]["fn"]>>, []>>;
+      "open": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["isPollOpen"]["fn"]>>, []>>;
+      "options": {
+        "canRemove": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["canRemovePollOption"]["fn"]>>, []>>;
+        "label": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Polling"]["_listOptions"]>>>, ["label"]>>;
+        "option": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Polling"]["_getVoteCount"]>[0], ["option"]>, AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Polling"]["_listOptions"]>>>, ["option"]>]>>;
+        "voteCount": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Polling"]["_getVoteCount"]>>>, ["voteCount"]>>;
+      }[];
+      "votedOption": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Polling"]["_getVote"]>>>, ["option"]>> | null;
+    } | {
+      "confirmedVenue": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.computations)["isPollOpen"]["fn"]>[0], ["confirmedVenue"]>, AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>>>, ["confirmedVenue"]>]>> | null;
+      "hosting": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["matchesUser"]["fn"]>>, []>>;
+      "open": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["isPollOpen"]["fn"]>>, []>>;
+      "options": {
+        "canRemove": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["canRemovePollOption"]["fn"]>>, []>>;
+        "label": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Polling"]["_listOptions"]>>>, ["label"]>>;
+        "option": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Polling"]["_getVoteCount"]>[0], ["option"]>, AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Polling"]["_listOptions"]>>>, ["option"]>]>>;
+        "voteCount": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Polling"]["_getVoteCount"]>>>, ["voteCount"]>>;
+      }[];
+      "votedOption": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Polling"]["_getVote"]>>>, ["option"]>> | null;
+    };
+    error: { error: AppWideError | "INVALID_INPUT" | "NOT_PARTICIPANT" | "NO_SUCH_TABLE" | "TABLE_INACTIVE" | "UNKNOWN_SESSION" };
+  };
+  "/api/tables/poll/add": {
+    input: {
+      "gathering": Jsonify<OneOf<[AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Polling"]["addOption"]>[0], ["scope"]>, AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>[0], ["gathering"]>]>>;
+      "label": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Polling"]["addOption"]>[0], ["label"]>>;
+      "session": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>[0], ["session"]>>;
+    };
+    output: {
+      "option": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Polling"]["addOption"]>>, ["option"]>>;
+    } | {
+      "option": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Polling"]["addOption"]>>, ["option"]>>;
+    };
+    error: { error: AppWideError | "DUPLICATE_OPTION" | "INVALID_INPUT" | "INVALID_OPTION" | "NOT_PARTICIPANT" | "NO_SUCH_TABLE" | "OPTION_LIMIT_REACHED" | "POLL_CLOSED" | "TABLE_INACTIVE" | "UNKNOWN_SESSION" };
+  };
+  "/api/tables/poll/choose-venue": {
+    input: {
+      "gathering": Jsonify<OneOf<[AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["setVenue"]>[0], ["gathering"]>, AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>[0], ["gathering"]>]>>;
+      "option": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Polling"]["_getOption"]>[0], ["option"]>>;
+      "session": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>[0], ["session"]>>;
+    };
+    output: {
+      "confirmedVenue": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["setVenue"]>[0], ["confirmedVenue"]>>;
+    };
+    error: { error: AppWideError | "CANNOT_SET_VENUE" | "INVALID_DETAILS" | "INVALID_INPUT" | "NOT_HOST" | "NO_SUCH_OPTION" | "NO_SUCH_TABLE" | "POLL_CLOSED" | "TABLE_INACTIVE" | "UNKNOWN_SESSION" };
+  };
+  "/api/tables/poll/remove": {
+    input: {
+      "gathering": Jsonify<OneOf<[AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>[0], ["gathering"]>, AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Polling"]["removeOption"]>[0], ["scope"]>]>>;
+      "option": Jsonify<OneOf<[AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Polling"]["_getOption"]>[0], ["option"]>, AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Polling"]["removeOption"]>[0], ["option"]>]>>;
+      "session": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>[0], ["session"]>>;
+    };
+    output: {
+      "removed": true;
+    };
+    error: { error: AppWideError | "INVALID_INPUT" | "NOT_AUTHORIZED" | "NOT_PARTICIPANT" | "NO_SUCH_OPTION" | "NO_SUCH_TABLE" | "POLL_CLOSED" | "TABLE_INACTIVE" | "UNKNOWN_SESSION" };
+  };
+  "/api/tables/poll/unvote": {
+    input: {
+      "gathering": Jsonify<OneOf<[AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Polling"]["clearVote"]>[0], ["scope"]>, AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>[0], ["gathering"]>]>>;
+      "session": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>[0], ["session"]>>;
+    };
+    output: {
+      "cleared": true;
+    };
+    error: { error: AppWideError | "INVALID_INPUT" | "NOT_PARTICIPANT" | "NO_SUCH_TABLE" | "POLL_CLOSED" | "TABLE_INACTIVE" | "UNKNOWN_SESSION" };
+  };
+  "/api/tables/poll/vote": {
+    input: {
+      "gathering": Jsonify<OneOf<[AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Polling"]["castVote"]>[0], ["scope"]>, AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>[0], ["gathering"]>]>>;
+      "option": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Polling"]["castVote"]>[0], ["option"]>>;
+      "session": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>[0], ["session"]>>;
+    };
+    output: {
+      "voted": true;
+    };
+    error: { error: AppWideError | "INVALID_INPUT" | "NOT_PARTICIPANT" | "NO_SUCH_OPTION" | "NO_SUCH_TABLE" | "POLL_CLOSED" | "TABLE_INACTIVE" | "UNKNOWN_SESSION" };
+  };
   "/api/tables/profiles": {
     input: {
       "gathering": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>[0], ["gathering"]>>;
@@ -618,6 +704,92 @@ export type AppWireHttp = {
       };
     };
     error: { error: HttpAppWideError | "INVALID_REQUEST" | "UNAUTHORIZED" };
+  };
+  "/api/tables/poll": {
+    input: {
+      "gathering": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>[0], ["gathering"]>>;
+      "session": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>[0], ["session"]>>;
+    };
+    output: {
+      "confirmedVenue": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.computations)["isPollOpen"]["fn"]>[0], ["confirmedVenue"]>, AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>>>, ["confirmedVenue"]>]>> | null;
+      "hosting": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["matchesUser"]["fn"]>>, []>>;
+      "open": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["isPollOpen"]["fn"]>>, []>>;
+      "options": {
+        "canRemove": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["canRemovePollOption"]["fn"]>>, []>>;
+        "label": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Polling"]["_listOptions"]>>>, ["label"]>>;
+        "option": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Polling"]["_getVoteCount"]>[0], ["option"]>, AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Polling"]["_listOptions"]>>>, ["option"]>]>>;
+        "voteCount": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Polling"]["_getVoteCount"]>>>, ["voteCount"]>>;
+      }[];
+      "votedOption": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Polling"]["_getVote"]>>>, ["option"]>> | null;
+    } | {
+      "confirmedVenue": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.computations)["isPollOpen"]["fn"]>[0], ["confirmedVenue"]>, AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>>>, ["confirmedVenue"]>]>> | null;
+      "hosting": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["matchesUser"]["fn"]>>, []>>;
+      "open": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["isPollOpen"]["fn"]>>, []>>;
+      "options": {
+        "canRemove": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.computations)["canRemovePollOption"]["fn"]>>, []>>;
+        "label": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Polling"]["_listOptions"]>>>, ["label"]>>;
+        "option": Jsonify<AllOf<[AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Polling"]["_getVoteCount"]>[0], ["option"]>, AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Polling"]["_listOptions"]>>>, ["option"]>]>>;
+        "voteCount": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Polling"]["_getVoteCount"]>>>, ["voteCount"]>>;
+      }[];
+      "votedOption": Jsonify<AtPath<QueryRow<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Polling"]["_getVote"]>>>, ["option"]>> | null;
+    };
+    error: { error: HttpAppWideError | "CONFLICT" | "FORBIDDEN" | "INVALID_REQUEST" | "NOT_FOUND" | "UNAUTHORIZED" };
+  };
+  "/api/tables/poll/add": {
+    input: {
+      "gathering": Jsonify<OneOf<[AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Polling"]["addOption"]>[0], ["scope"]>, AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>[0], ["gathering"]>]>>;
+      "label": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Polling"]["addOption"]>[0], ["label"]>>;
+      "session": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>[0], ["session"]>>;
+    };
+    output: {
+      "option": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Polling"]["addOption"]>>, ["option"]>>;
+    } | {
+      "option": Jsonify<AtPath<Awaited<ReturnType<(typeof ApplicationConceptSet.concepts)["Polling"]["addOption"]>>, ["option"]>>;
+    };
+    error: { error: HttpAppWideError | "CONFLICT" | "FORBIDDEN" | "INVALID_REQUEST" | "NOT_FOUND" | "UNAUTHORIZED" };
+  };
+  "/api/tables/poll/choose-venue": {
+    input: {
+      "gathering": Jsonify<OneOf<[AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["setVenue"]>[0], ["gathering"]>, AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>[0], ["gathering"]>]>>;
+      "option": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Polling"]["_getOption"]>[0], ["option"]>>;
+      "session": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>[0], ["session"]>>;
+    };
+    output: {
+      "confirmedVenue": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["setVenue"]>[0], ["confirmedVenue"]>>;
+    };
+    error: { error: HttpAppWideError | "CONFLICT" | "INVALID_REQUEST" | "NOT_FOUND" | "UNAUTHORIZED" };
+  };
+  "/api/tables/poll/remove": {
+    input: {
+      "gathering": Jsonify<OneOf<[AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>[0], ["gathering"]>, AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Polling"]["removeOption"]>[0], ["scope"]>]>>;
+      "option": Jsonify<OneOf<[AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Polling"]["_getOption"]>[0], ["option"]>, AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Polling"]["removeOption"]>[0], ["option"]>]>>;
+      "session": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>[0], ["session"]>>;
+    };
+    output: {
+      "removed": true;
+    };
+    error: { error: HttpAppWideError | "CONFLICT" | "FORBIDDEN" | "INVALID_REQUEST" | "NOT_FOUND" | "UNAUTHORIZED" };
+  };
+  "/api/tables/poll/unvote": {
+    input: {
+      "gathering": Jsonify<OneOf<[AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Polling"]["clearVote"]>[0], ["scope"]>, AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>[0], ["gathering"]>]>>;
+      "session": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>[0], ["session"]>>;
+    };
+    output: {
+      "cleared": true;
+    };
+    error: { error: HttpAppWideError | "CONFLICT" | "FORBIDDEN" | "INVALID_REQUEST" | "NOT_FOUND" | "UNAUTHORIZED" };
+  };
+  "/api/tables/poll/vote": {
+    input: {
+      "gathering": Jsonify<OneOf<[AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Polling"]["castVote"]>[0], ["scope"]>, AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Hosting"]["_getDetails"]>[0], ["gathering"]>]>>;
+      "option": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Polling"]["castVote"]>[0], ["option"]>>;
+      "session": Jsonify<AtPath<Parameters<(typeof ApplicationConceptSet.concepts)["Sessioning"]["current"]>[0], ["session"]>>;
+    };
+    output: {
+      "voted": true;
+    };
+    error: { error: HttpAppWideError | "CONFLICT" | "FORBIDDEN" | "INVALID_REQUEST" | "NOT_FOUND" | "UNAUTHORIZED" };
   };
   "/api/tables/profiles": {
     input: {

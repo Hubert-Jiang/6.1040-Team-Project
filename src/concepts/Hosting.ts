@@ -5,6 +5,7 @@ export class InvalidSchedule extends Error {}
 export class InvalidDetails extends Error {}
 export class NotHost extends Error {}
 export class CannotConfirm extends Error {}
+export class CannotSetVenue extends Error {}
 export class CannotBook extends Error {}
 export class CannotCancel extends Error {}
 
@@ -127,14 +128,17 @@ export class HostingConcept {
     throw new CannotConfirm("This gathering can no longer be confirmed.");
   }
 
-  /** Sets the venue of an OPEN or CONFIRMED gathering. Raises InvalidDetails when empty or over 100 characters. */
+  /**
+   * Sets the venue of an OPEN or CONFIRMED gathering. Raises InvalidDetails when empty or over 100 characters,
+   * and CannotSetVenue when the gathering does not exist or is not OPEN or CONFIRMED.
+   */
   async setVenue({ gathering, confirmedVenue }: { gathering: string; confirmedVenue: string }) {
     const venue = confirmedVenue.trim();
     if (!venue || venue.length > MAX_SHORT_FIELD_LENGTH) {
       throw new InvalidDetails("Confirmed venue must be non-empty and at most 100 characters.");
     }
     if (await this.#move({ _id: gathering, status: { $in: ["OPEN", "CONFIRMED"] } }, { $set: { confirmedVenue: venue } })) return {};
-    throw new Error(`cannot set the venue of gathering ${gathering}`);
+    throw new CannotSetVenue("Venue can only be set on an open or confirmed gathering.");
   }
 
   /** Marks a CONFIRMED gathering with a venue BOOKED. Raises NotHost for anyone but its host, and CannotBook otherwise. */

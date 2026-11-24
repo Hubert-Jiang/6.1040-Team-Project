@@ -4,6 +4,7 @@ import authenticatingSpec from "@design/concepts/Authenticating.md" with { type:
 import hostingSpec from "@design/concepts/Hosting.md" with { type: "text" };
 import invitingSpec from "@design/concepts/Inviting.md" with { type: "text" };
 import linkingSpec from "@design/concepts/Linking.md" with { type: "text" };
+import pollingSpec from "@design/concepts/Polling.md" with { type: "text" };
 import profilingSpec from "@design/concepts/Profiling.md" with { type: "text" };
 import reservingSpec from "@design/concepts/Reserving.md" with { type: "text" };
 import sessioningSpec from "@design/concepts/Sessioning.md" with { type: "text" };
@@ -20,6 +21,7 @@ import {
   CannotBook,
   CannotCancel as CannotCancelGathering,
   CannotConfirm,
+  CannotSetVenue,
   HostingConcept,
   HostLimitReached,
   InvalidDetails,
@@ -28,6 +30,13 @@ import {
 } from "./concepts/Hosting.ts";
 import { AlreadyAccepted, InvalidPendingKey, InvitingConcept, NotAccepted } from "./concepts/Inviting.ts";
 import { InvalidExpiry, InvalidLabel, LinkingConcept, NotCreator } from "./concepts/Linking.ts";
+import {
+  DuplicateOption,
+  InvalidOption,
+  NoSuchOption,
+  OptionLimitReached,
+  PollingConcept,
+} from "./concepts/Polling.ts";
 import { InvalidDistance, InvalidProfile, ProfilingConcept } from "./concepts/Profiling.ts";
 import {
   AlreadyInPool,
@@ -106,6 +115,7 @@ const hosting = registerConcept({
     INVALID_DETAILS: InvalidDetails,
     NOT_HOST: NotHost,
     CANNOT_CONFIRM: CannotConfirm,
+    CANNOT_SET_VENUE: CannotSetVenue,
     CANNOT_BOOK: CannotBook,
     CANNOT_CANCEL: CannotCancelGathering,
   },
@@ -160,6 +170,18 @@ const profiling = registerConcept({
   floors: { mongo: ({ database }: MongoFloorContext, name: string) => new ProfilingConcept(database, name) },
 });
 
+const polling = registerConcept({
+  class: PollingConcept,
+  spec: pollingSpec,
+  refusals: {
+    INVALID_OPTION: InvalidOption,
+    DUPLICATE_OPTION: DuplicateOption,
+    OPTION_LIMIT_REACHED: OptionLimitReached,
+    NO_SUCH_OPTION: NoSuchOption,
+  },
+  floors: { mongo: ({ database }: MongoFloorContext, name: string) => new PollingConcept(database, name) },
+});
+
 // each concept is registered above and listed here once
 export const applicationConceptSet = conceptSet(
   {
@@ -170,6 +192,7 @@ export const applicationConceptSet = conceptSet(
     Linking: linking,
     Inviting: inviting,
     Profiling: profiling,
+    Polling: polling,
   },
   {
     now: (_input: Record<string, never>) => new Date(),
@@ -209,6 +232,11 @@ export const applicationConceptSet = conceptSet(
     },
     isActiveTableStatus: ({ status }: { status: string }) =>
       status === "OPEN" || status === "CONFIRMED" || status === "BOOKED",
+    matchesUser: ({ a, b }: { a: string; b: string }) => a === b,
+    isPollOpen: ({ status, confirmedVenue }: { status: string; confirmedVenue?: string | null }) =>
+      (status === "OPEN" || status === "CONFIRMED") && (confirmedVenue == null || confirmedVenue.trim().length === 0),
+    canRemovePollOption: ({ hosting, proposedBy, viewer }: { hosting: boolean; proposedBy: string; viewer: string }) =>
+      hosting || proposedBy === viewer,
   },
 );
 
